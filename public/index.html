@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>砖成本材料预算 · 成本估算系统</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%231f2d3d'/%3E%3Ctext x='8' y='11.8' font-size='10' text-anchor='middle' fill='%23fff' font-family='sans-serif'%3E砖%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-title">
+      <h1>浙江陆创新材料科技有限公司 · 砖成本材料预算系统</h1>
+      <div class="app-sub">本地 Web 版 —— 数据自动保存于 data/data.json</div>
+    </div>
+    <nav id="tabs" class="tabs">
+      <button class="tab active" data-view="materials">材料管理</button>
+      <button class="tab" data-view="products">产品配方</button>
+      <button class="tab" data-view="estimates">估算单</button>
+      <button class="tab" data-view="charts">图表预览</button>
+      <button class="tab" data-view="compare">历史对比</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-materials" class="view"></section>
+    <section id="view-products" class="view" hidden></section>
+    <section id="view-estimates" class="view" hidden></section>
+    <section id="view-charts" class="view" hidden></section>
+    <section id="view-compare" class="view" hidden></section>
+    <section id="view-editor" class="view" hidden></section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="boot-error" class="boot-error" hidden></div>
+
+  <!-- 退出编辑器三选弹窗 -->
+  <div id="exit-modal" class="modal-mask" hidden>
+    <div class="modal-box">
+      <h3>退出前请选择保存方式</h3>
+      <p id="exit-missing" class="modal-note"></p>
+      <div class="modal-actions">
+        <button data-exit-choice="draft">存为草稿</button>
+        <button data-exit-choice="discard">不保存(放弃修改)</button>
+        <button class="primary" data-exit-choice="ready">保存为可用表格</button>
+        <button data-exit-choice="cancel">取消(留在编辑)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通用确认弹窗(相邻批次衔接提醒等) -->
+  <div id="confirm-modal" class="modal-mask" hidden>
+    <div class="modal-box">
+      <h3 id="confirm-title">确认</h3>
+      <p id="confirm-msg" class="modal-note" style="white-space:pre-line"></p>
+      <div class="modal-actions">
+        <button id="confirm-cancel">取消</button>
+        <button class="primary" id="confirm-ok">仍要保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/calc.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/formula.js"></script>
+  <script src="js/sheet.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+/* 砖成本估算系统 —— 样式(黑白打印友好) */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-size: 14px;
+  color: #222;
+  background: #f5f6f8;
+}
+
+/* ---- 头部 ---- */
+.app-header {
+  background: #1f2d3d;
+  color: #fff;
+  padding: 10px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.app-header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.app-sub { font-size: 12px; opacity: .8; margin-top: 2px; }
+.tabs { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid rgba(255,255,255,.35);
+  background: transparent;
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.tab:hover { background: rgba(255,255,255,.15); }
+.tab.active { background: #fff; color: #1f2d3d; border-color: #fff; font-weight: 600; }
+
+main { max-width: 1280px; margin: 16px auto; padding: 0 16px; }
+
+.view { background: #fff; border: 1px solid #dfe3e8; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
+
+/* ---- 通用 ---- */
+h2.sec-title { margin: 0 0 12px; font-size: 17px; border-left: 4px solid #1f2d3d; padding-left: 10px; }
+h3 { margin: 0 0 10px; }
+h4.section-h { margin: 18px 0 8px; font-size: 15px; border-left: 4px solid #8899aa; padding-left: 8px; }
+button {
+  font-size: 13px;
+  padding: 5px 12px;
+  border: 1px solid #aab;
+  border-radius: 4px;
+  background: #f0f2f5;
+  cursor: pointer;
+}
+button:hover { background: #e2e6ec; }
+button.primary { background: #1f2d3d; color: #fff; border-color: #1f2d3d; }
+button.primary:hover { background: #31445c; }
+button.danger { color: #b00020; border-color: #d8a0a8; }
+button.danger:hover { background: #fbeaec; }
+button.small { padding: 2px 8px; font-size: 12px; }
+
+input, select {
+  font-size: 13px;
+  padding: 3px 6px;
+  border: 1px solid #b6bcc6;
+  border-radius: 3px;
+  background: #fff;
+}
+input[type="number"] { width: 92px; text-align: right; }
+input[type="text"] { width: 150px; }
+input[type="date"] { width: 132px; }
+input:focus, select:focus { outline: 2px solid #7aa2c9; border-color: #7aa2c9; }
+input.calc-input { width: 88px; }
+
+table.grid { border-collapse: collapse; width: 100%; margin: 6px 0; }
+table.grid th, table.grid td {
+  border: 1px solid #9aa2ae;
+  padding: 4px 7px;
+  text-align: right;
+  white-space: nowrap;
+}
+table.grid th { background: #e8ebef; text-align: center; font-weight: 600; }
+table.grid td.l, table.grid th.l { text-align: left; }
+table.grid tr.total-row td { background: #f2f4f7; font-weight: 700; }
+td.calc-cell { background: #f7f9fb; color: #14508f; font-weight: 600; }
+td.money { color: #14508f; }
+.ratio-cell { color: #333; }
+
+/* ---- 编辑区 ---- */
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 14px; margin: 10px 0; }
+.meta-grid label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.meta-grid label span { min-width: 70px; text-align: right; }
+
+.recipe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .recipe-grid { grid-template-columns: 1fr; } }
+.recipe-box { border: 1px solid #cfd6de; border-radius: 5px; padding: 10px; background: #fbfcfe; }
+.recipe-box h5 { margin: 0 0 8px; font-size: 14px; }
+.pot-line { margin-top: 8px; font-size: 13px; }
+.pot-line b { color: #14508f; }
+
+.calc-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 12px; }
+@media (max-width: 1000px) { .calc-grid { grid-template-columns: repeat(3, 1fr); } }
+.calc-cell-box { display: flex; flex-direction: column; gap: 3px; }
+.calc-cell-box label { font-size: 12px; color: #555; }
+.calc-cell-box .calc-out { font-weight: 700; color: #14508f; padding: 4px 2px; min-height: 24px; }
+
+.cost-total { margin-top: 12px; padding: 10px 14px; background: #eef4fb; border: 1px solid #bcd3ea; border-radius: 5px; }
+.cost-total .row { margin: 4px 0; }
+.cost-total b { color: #0b4a8a; font-size: 16px; }
+
+/* ---- 列表 ---- */
+.list-actions { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.empty-hint { color: #888; padding: 16px 0; text-align: center; }
+
+/* ---- 对比 ---- */
+.compare-note { color: #777; font-size: 12px; margin: 4px 0 10px; }
+.comp-table-wrap { overflow-x: auto; }
+
+/* ---- 图表 ---- */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1100px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-card { border: 1px solid #dfe3e8; border-radius: 6px; padding: 12px 14px; background: #fff; }
+.chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.chart-head h3 { margin: 0; font-size: 15px; }
+.chart-note { color: #888; font-size: 12px; }
+.chart-wrap { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.chart-svg { width: 100%; height: auto; display: block; }
+.donut-svg { max-width: 250px; flex: none; }
+.chart-legend { display: flex; flex-direction: column; gap: 4px; min-width: 240px; flex: 1; }
+.chart-legend-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; flex: none; }
+.l-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l-val { font-weight: 600; white-space: nowrap; }
+.l-pct { color: #666; width: 52px; text-align: right; }
+.donut-total { font-size: 20px; font-weight: 700; fill: #14508f; }
+.donut-cap { font-size: 11px; fill: #888; }
+.donut-seg { cursor: pointer; }
+.donut-seg:hover { stroke-width: 40; }
+.axis-label { font-size: 11px; fill: #666; }
+.x-label { font-size: 11px; fill: #333; }
+.x-label.dim { fill: #888; font-size: 10px; }
+.grid-line { stroke: #e5e8ec; stroke-width: 1; }
+.axis-line { stroke: #9aa2ae; stroke-width: 1; }
+.bar { cursor: pointer; }
+.bar:hover { opacity: .75; }
+.bar-val { font-size: 10.5px; fill: #333; }
+.dot { cursor: pointer; }
+.dot:hover { stroke: #333; stroke-width: 1.5; }
+.h-label { font-size: 12px; fill: #333; }
+.h-val { font-size: 12px; fill: #14508f; font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid #b6bcc6; border-radius: 4px; overflow: hidden; }
+.seg-btn { border: none; background: #f0f2f5; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.seg-btn.active { background: #1f2d3d; color: #fff; }
+
+/* ---- 提示 ---- */
+.toast {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2d3d;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 5px;
+  font-size: 14px;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.boot-error {
+  position: fixed; inset: 0;
+  background: #fff8f0;
+  border: 2px solid #c66;
+  padding: 60px 30px;
+  font-size: 15px;
+  z-index: 200;
+}
+.est-card { border: 1px solid #dfe3e8; border-radius: 5px; padding: 8px 12px; margin-bottom: 8px; }
+.est-card .name { font-weight: 700; }
+.est-card .meta { color: #666; font-size: 12px; margin: 2px 0 6px; }
+
+/* ---- Excel 化表格编辑器 ---- */
+.editor-title { margin: 0 14px; }
+.fxbar { display: flex; align-items: center; gap: 6px; border: 1px solid #b6bcc6; border-radius: 4px;
+  background: #fff; padding: 4px 8px; margin: 8px 0; }
+.fx-name { min-width: 44px; text-align: center; font-weight: 700; color: #14508f;
+  border-right: 1px solid #ccd3dc; padding-right: 8px; }
+.fx-prefix { font-style: italic; color: #888; font-size: 12px; }
+#fx-input { flex: 1; border: none; outline: none; font-size: 14px; padding: 2px 4px; }
+.sheet-hint { color: #888; font-size: 12px; margin: 4px 0 8px; line-height: 1.6; }
+.sheet-scroll { overflow-x: auto; border: 1px solid #b6bcc6; border-radius: 4px; background: #fff; }
+table.sheet-grid { border-collapse: collapse; table-layout: fixed; min-width: 1120px; }
+table.sheet-grid col.col-A { width: 46px; }
+table.sheet-grid col.col-B { width: 150px; }
+table.sheet-grid col.col-C { width: 96px; }
+table.sheet-grid col.col-D { width: 104px; }
+table.sheet-grid col.col-E, table.sheet-grid col.col-F, table.sheet-grid col.col-G,
+table.sheet-grid col.col-H, table.sheet-grid col.col-I, table.sheet-grid col.col-J { width: 96px; }
+table.sheet-grid col.col-K { width: 104px; }
+table.sheet-grid col.col-L { width: 110px; }
+table.sheet-grid th.corner, table.sheet-grid th.colh { background: #dde3ea; border: 1px solid #b6bcc6;
+  font-size: 11px; color: #445; padding: 3px; text-align: center; font-weight: 600; }
+table.sheet-grid td.sg { border: 1px solid #c6ccd6; padding: 4px 6px; font-size: 13px;
+  height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.sheet-grid td.sg.title { text-align: center; font-weight: 700; font-size: 15px; background: #eef1f5; }
+table.sheet-grid td.sg.sech { text-align: center; font-weight: 700; background: #e3e8ef; }
+table.sheet-grid td.sg.hdr { text-align: center; font-weight: 600; background: #eef1f5; }
+table.sheet-grid td.sg.lab { background: #f2f4f7; color: #444; text-align: left; font-size: 12px; }
+table.sheet-grid td.sg.mat { text-align: left; }
+table.sheet-grid td.sg.seq { text-align: center; color: #666; }
+table.sheet-grid td.sg.in { background: #fff; text-align: right; cursor: cell; }
+table.sheet-grid td.sg.fx { background: #eef5fb; text-align: right; color: #14508f; font-weight: 600; cursor: cell; }
+table.sheet-grid td.sg.err { color: #c00; font-weight: 700; background: #fdf0f0; }
+table.sheet-grid td.sg.sel { outline: 2px solid #2f6bb0; outline-offset: -2px; background: #fffbe6; }
+table.sheet-grid td.void { border: 1px solid transparent; }
+.chip-bar { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip-hint { color: #666; font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #b6c2d0;
+  background: #eef3f9; border-radius: 12px; padding: 1px 8px 1px 10px; font-size: 12.5px; }
+.chip-x { border: none; background: none; color: #b00020; cursor: pointer; font-size: 11px; padding: 0 2px; }
+.chip-x:hover { color: #fff; background: #b00020; border-radius: 50%; }
+.editor-note { color: #888; font-size: 12px; margin-top: 6px; }
+
+/* ---- 必填高亮 / 状态标签 / 必填提示条 ---- */
+table.sheet-grid td.sg.need { background: #fff3c4; font-weight: 700; color: #8a6d00; }
+.required-bar { margin: 2px 0 8px; padding: 5px 10px; border-radius: 4px; font-size: 12.5px; background: #eef7ee; color: #2c7a2c; border: 1px solid #bfe3bf; }
+.required-bar.warn { background: #fff7e0; color: #8a6d00; border-color: #ecd79a; }
+.tag { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+.tag-draft { background: #fff0d0; color: #a06700; border: 1px solid #e8c97a; }
+.tag-ready { background: #dff2df; color: #2c7a2c; border: 1px solid #a5d6a5; }
+
+/* ---- 通用:hidden 属性永远生效(防止 display 类样式覆盖导致弹窗常驻/无法关闭) ---- */
+[hidden] { display: none !important; }
+
+/* ---- 弹窗 ---- */
+.modal-mask { position: fixed; inset: 0; background: rgba(20,30,45,.45); z-index: 300; display: flex;
+  align-items: center; justify-content: center; }
+.modal-box { background: #fff; border-radius: 8px; padding: 20px 24px; max-width: 520px; width: 92%;
+  box-shadow: 0 8px 30px rgba(0,0,0,.3); }
+.modal-box h3 { margin: 0 0 10px; }
+.modal-note { color: #555; font-size: 13.5px; line-height: 1.7; margin: 0 0 6px; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+/* ---- 产品配方导入条(估算单编辑器) ---- */
+.pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; font-size: 13px; }
+.pick-bar label { color: #444; }
