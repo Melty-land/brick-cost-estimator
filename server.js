@@ -1,21 +1,30 @@
 /**
- * 砖成本估算系统 —— 本地服务(零第三方依赖,仅用 Node 内置模块)
- *
- * 启动:node server.js  (默认端口 8237,可用环境变量 PORT 覆盖)
- * 功能:静态文件服务(public/) + 数据读写 API(/api/data)
- * 数据:data/data.json(首次启动自动生成并写入 11 种种子材料)
+ * 砖成本估算系统 —— 本地服务(零第三方依赖)
+ * 存储:SQLite(Node 内置 node:sqlite)→ data/brick.db
+ * 功能:
+ *   - 静态文件服务(public/)
+ *   - 数据 API:GET/PUT /api/data(与前端 Store 数据模型完全兼容)
+ *   - 备份:B3 在线快照 POST /api/db/backup(VACUUM INTO,轮转保留 30 份)
+ *          B2 导出 POST /api/db/export(zip,含业务数据与元信息)
+ *          导入 POST /api/db/import(兼容 zip 或 JSON 回灌;导入前自动快照)
+ * 迁移:首次启动检测旧 data/data.json 自动导入(原文件保留,不删除)
  */
 'use strict';
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
+const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, 'public');
 const DATA_DIR = path.join(ROOT, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'data.json');
+const DB_FILE = path.join(DATA_DIR, 'brick.db');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const LEGACY_FILE = path.join(DATA_DIR, 'data.json');
 const PORT = process.env.PORT || 8237;
+const BACKUP_KEEP = 30;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -24,62 +33,337 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.zip': 'application/zip',
+  '.db': 'application/octet-stream'
 };
 
-/** 初始数据:11 种种子材料(底料 5 种、面料 6 种,与原表一致) */
-function seedData() {
+// ================= SQLite =================
+let db = null;
+
+const DDL = `
+CREATE TABLE IF NOT EXISTS materials (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, zone TEXT NOT NULL, sort INTEGER DEFAULT 0, created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY, name TEXT, code TEXT, created_at TEXT, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS product_recipe (
+  product_id TEXT NOT NULL, seq INTEGER NOT NULL, material_id TEXT NOT NULL,
+  qty_per_pot REAL DEFAULT 0, PRIMARY KEY (product_id, seq)
+);
+CREATE TABLE IF NOT EXISTS estimates (
+  id TEXT PRIMARY KEY, product_id TEXT, name TEXT, code TEXT,
+  status TEXT DEFAULT 'draft', author TEXT, start_date TEXT, end_date TEXT,
+  pot_bottom REAL DEFAULT 0, pot_top REAL DEFAULT 0,
+  calc TEXT, formulas TEXT, created_at TEXT, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS estimate_rows (
+  id TEXT PRIMARY KEY, estimate_id TEXT NOT NULL, seq INTEGER NOT NULL,
+  material_id TEXT, name TEXT, zone TEXT, qty_per_pot REAL, price REAL,
+  stock_on_hand REAL, stock_in REAL, qty REAL
+);
+CREATE TABLE IF NOT EXISTS users (
+  username TEXT PRIMARY KEY, nickname TEXT, role TEXT DEFAULT 'user',
+  salt TEXT, hash TEXT, created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY, username TEXT, exp INTEGER
+);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE INDEX IF NOT EXISTS idx_estimate_rows_est ON estimate_rows(estimate_id);
+CREATE INDEX IF NOT EXISTS idx_estimates_product ON estimates(product_id);
+`;
+
+function openDb() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  db = new DatabaseSync(DB_FILE);
+  db.exec('PRAGMA journal_mode=WAL;');
+  db.exec(DDL);
+}
+
+function metaGet(key, def) {
+  const r = db.prepare('SELECT value FROM meta WHERE key=?').get(key);
+  return r ? r.value : def;
+}
+function metaSet(key, value) {
+  db.prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
+}
+
+function nowIso() { return new Date().toISOString(); }
+
+function seedMaterials() {
+  const names = [
+    ['m1', '黑水泥', '底料'], ['m2', '3-6', '底料'], ['m3', '5-10', '底料'],
+    ['m4', '机制砂', '底料'], ['m5', '石粉', '底料'], ['m6', '白水泥', '面料'],
+    ['m7', '精白砂', '面料'], ['m8', '金刚黑', '面料'], ['m9', '普砂', '面料'],
+    ['m10', '增强剂', '面料'], ['m11', '染料', '面料']
+  ];
+  const ins = db.prepare('INSERT OR REPLACE INTO materials(id,name,zone,sort,created_at) VALUES(?,?,?,?,?)');
+  names.forEach(function (n, i) { ins.run(n[0], n[1], n[2], i + 1, nowIso()); });
+  metaSet('seq.material', String(names.length));
+}
+
+// ---------- 数据装配(data.json 兼容结构) ----------
+function assembleBlob() {
+  const materials = db.prepare('SELECT id,name,zone FROM materials ORDER BY sort,rowid').all()
+    .map(function (r) { return { id: r.id, name: r.name, zone: r.zone }; });
+  const prows = db.prepare('SELECT * FROM products ORDER BY rowid').all();
+  const rrows = db.prepare('SELECT * FROM product_recipe ORDER BY seq').all();
+  const erows = db.prepare('SELECT * FROM estimates ORDER BY rowid').all();
+  const eri = db.prepare('SELECT * FROM estimate_rows ORDER BY seq').all();
+  const products = prows.map(function (p) {
+    return {
+      id: p.id, name: p.name, code: p.code,
+      recipe: rrows.filter(function (r) { return r.product_id === p.id; })
+        .map(function (r) { return { materialId: r.material_id, qtyPerPot: r.qty_per_pot }; })
+    };
+  });
+  const estimates = erows.map(function (e) {
+    let calc = {}, formulas = null;
+    try { calc = e.calc ? JSON.parse(e.calc) : {}; } catch (err) { calc = {}; }
+    try { formulas = e.formulas ? JSON.parse(e.formulas) : null; } catch (err) { formulas = null; }
+    return {
+      id: e.id, productId: e.product_id || null, status: e.status || 'draft',
+      name: e.name, code: e.code, author: e.author,
+      startDate: e.start_date, endDate: e.end_date,
+      potBottom: e.pot_bottom, potTop: e.pot_top,
+      rows: eri.filter(function (r) { return r.estimate_id === e.id; }).map(function (r) {
+        return {
+          id: r.id, materialId: r.material_id, name: r.name, zone: r.zone,
+          qtyPerPot: r.qty_per_pot, price: r.price,
+          stockOnHand: r.stock_on_hand, stockIn: r.stock_in, qty: r.qty
+        };
+      }),
+      calc: calc,
+      formulas: formulas
+    };
+  });
   return {
-    materials: [
-      { id: 'm1', name: '黑水泥', zone: '底料' },
-      { id: 'm2', name: '3-6', zone: '底料' },
-      { id: 'm3', name: '5-10', zone: '底料' },
-      { id: 'm4', name: '机制砂', zone: '底料' },
-      { id: 'm5', name: '石粉', zone: '底料' },
-      { id: 'm6', name: '白水泥', zone: '面料' },
-      { id: 'm7', name: '精白砂', zone: '面料' },
-      { id: 'm8', name: '金刚黑', zone: '面料' },
-      { id: 'm9', name: '普砂', zone: '面料' },
-      { id: 'm10', name: '增强剂', zone: '面料' },
-      { id: 'm11', name: '染料', zone: '面料' }
-    ],
-    products: [],
-    estimates: [],
-    seq: { material: 11, product: 0, estimate: 0 }
+    materials: materials, products: products, estimates: estimates,
+    seq: {
+      material: Number(metaGet('seq.material', materials.length)),
+      product: Number(metaGet('seq.product', products.length)),
+      estimate: Number(metaGet('seq.estimate', estimates.length))
+    }
   };
 }
 
-function ensureData() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(seedData(), null, 2), 'utf8');
-    console.log('已初始化数据文件:' + DATA_FILE);
+// ---------- 数据回灌(把前端 blob 事务性写入数据库) ----------
+function ingestBlob(blob) {
+  db.exec('PRAGMA foreign_keys=OFF;');
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    db.exec('DELETE FROM estimate_rows; DELETE FROM estimates; DELETE FROM product_recipe; DELETE FROM products; DELETE FROM materials;');
+    const insM = db.prepare('INSERT INTO materials(id,name,zone,sort,created_at) VALUES(?,?,?,?,?)');
+    (blob.materials || []).forEach(function (m, i) { insM.run(String(m.id), String(m.name), m.zone === '面料' ? '面料' : '底料', i + 1, nowIso()); });
+    const insP = db.prepare('INSERT INTO products(id,name,code,created_at,updated_at) VALUES(?,?,?,?,?)');
+    const insR = db.prepare('INSERT INTO product_recipe(product_id,seq,material_id,qty_per_pot) VALUES(?,?,?,?)');
+    (blob.products || []).forEach(function (p) {
+      insP.run(String(p.id), p.name == null ? '' : String(p.name), p.code == null ? '' : String(p.code), nowIso(), nowIso());
+      (p.recipe || []).forEach(function (r, i) {
+        insR.run(String(p.id), i, String(r.materialId), Number(r.qtyPerPot) || 0);
+      });
+    });
+    const insE = db.prepare('INSERT INTO estimates(id,product_id,name,code,status,author,start_date,end_date,pot_bottom,pot_top,calc,formulas,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    const insRw = db.prepare('INSERT INTO estimate_rows(id,estimate_id,seq,material_id,name,zone,qty_per_pot,price,stock_on_hand,stock_in,qty) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    (blob.estimates || []).forEach(function (e) {
+      insE.run(
+        String(e.id), e.productId == null ? null : String(e.productId),
+        e.name == null ? '' : String(e.name), e.code == null ? '' : String(e.code),
+        e.status === 'ready' ? 'ready' : 'draft',
+        e.author == null ? '' : String(e.author),
+        e.startDate == null ? '' : String(e.startDate), e.endDate == null ? '' : String(e.endDate),
+        Number(e.potBottom) || 0, Number(e.potTop) || 0,
+        JSON.stringify(e.calc || {}), e.formulas ? JSON.stringify(e.formulas) : null,
+        nowIso(), nowIso()
+      );
+      (e.rows || []).forEach(function (r, i) {
+        insRw.run(String(r.id), String(e.id), i, r.materialId == null ? null : String(r.materialId),
+          r.name == null ? '' : String(r.name), r.zone === '面料' ? '面料' : '底料',
+          Number(r.qtyPerPot) || 0, Number(r.price) || 0,
+          Number(r.stockOnHand) || 0, Number(r.stockIn) || 0, Number(r.qty) || 0);
+      });
+    });
+    const seq = blob.seq || {};
+    metaSet('seq.material', Number(seq.material) || (blob.materials || []).length);
+    metaSet('seq.product', Number(seq.product) || (blob.products || []).length);
+    metaSet('seq.estimate', Number(seq.estimate) || (blob.estimates || []).length);
+    metaSet('schemaVersion', '2');
+    db.exec('COMMIT;');
+  } catch (e) {
+    db.exec('ROLLBACK;');
+    throw e;
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON;');
   }
 }
 
-function readData() {
-  ensureData();
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+// 首次启动:迁移旧 data.json
+function migrateLegacy() {
+  if (!fs.existsSync(LEGACY_FILE)) return;
+  try {
+    if (metaGet('migrated', '0') !== '1') {
+      const blob = JSON.parse(fs.readFileSync(LEGACY_FILE, 'utf8'));
+      if (blob && Array.isArray(blob.materials) && db.prepare('SELECT COUNT(*) AS c FROM materials').get().c === 0) {
+        ingestBlob(blob);
+        console.log('已从旧 data/data.json 迁移到 SQLite(data/brick.db),原文件已保留。');
+      }
+      metaSet('migrated', '1');
+    }
+  } catch (e) {
+    console.error('旧 data.json 迁移失败(已忽略):', e.message);
+    metaSet('migrated', '1');
+  }
 }
 
-function writeData(obj) {
-  ensureData();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(obj, null, 2), 'utf8');
+function ensureSeed() {
+  if (db.prepare('SELECT COUNT(*) AS c FROM materials').get().c === 0) seedMaterials();
 }
 
+// ================= ZIP(最小实现:store + deflate) =================
+function crc32(buf) {
+  let table = crc32.table;
+  if (!table) {
+    table = crc32.table = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c;
+    }
+  }
+  let crc = -1;
+  for (let i = 0; i < buf.length; i++) crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xFF];
+  return (crc ^ -1) >>> 0;
+}
+function dosDateTime() {
+  const d = new Date();
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = (((d.getFullYear() - 1980) & 0x7f) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  return { time: time & 0xFFFF, date: date & 0xFFFF };
+}
+function buildZip(entries) {
+  // entries: [{name, data(Buffer)}]
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const { time, date } = dosDateTime();
+  for (const e of entries) {
+    const nameBuf = Buffer.from(e.name, 'utf8');
+    const deflated = zlib.deflateRawSync(e.data);
+    const useDeflate = deflated.length < e.data.length;
+    const body = useDeflate ? deflated : e.data;
+    const crc = crc32(e.data);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0);
+    lh.writeUInt16LE(20, 4);
+    lh.writeUInt16LE(0x0800, 6); // UTF-8 标记
+    lh.writeUInt16LE(useDeflate ? 8 : 0, 8);
+    lh.writeUInt16LE(time, 10);
+    lh.writeUInt16LE(date, 12);
+    lh.writeUInt32LE(crc, 14);
+    lh.writeUInt32LE(body.length, 18);
+    lh.writeUInt32LE(e.data.length, 22);
+    lh.writeUInt16LE(nameBuf.length, 26);
+    lh.writeUInt16LE(0, 28);
+    chunks.push(lh, nameBuf, body);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0);
+    ch.writeUInt16LE(20, 4);
+    ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(0x0800, 8);
+    ch.writeUInt16LE(useDeflate ? 8 : 0, 10);
+    ch.writeUInt16LE(time, 12);
+    ch.writeUInt16LE(date, 14);
+    ch.writeUInt32LE(crc, 16);
+    ch.writeUInt32LE(body.length, 20);
+    ch.writeUInt32LE(e.data.length, 24);
+    ch.writeUInt16LE(nameBuf.length, 28);
+    ch.writeUInt16LE(0, 30);
+    ch.writeUInt16LE(0, 32);
+    ch.writeUInt16LE(0, 34);
+    ch.writeUInt16LE(0, 36);
+    ch.writeUInt32LE(0, 38);
+    ch.writeUInt32LE(offset, 42);
+    central.push(ch, nameBuf);
+    offset += lh.length + nameBuf.length + body.length;
+  }
+  const centralSize = central.reduce(function (s, b) { return s + b.length; }, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralSize, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat(chunks.concat(central, [eocd]));
+}
+function parseZip(buf) {
+  const out = {};
+  if (!buf || buf.length < 22 || buf.readUInt32LE(0) !== 0x04034b50) return null;
+  let i = buf.length - 22;
+  while (i > 0 && buf.readUInt32LE(i) !== 0x06054b50) i--;
+  if (buf.readUInt32LE(i) !== 0x06054b50) return null;
+  const count = buf.readUInt16LE(i + 10);
+  let off = buf.readUInt32LE(i + 16);
+  for (let n = 0; n < count; n++) {
+    if (buf.readUInt32LE(off) !== 0x02014b50) return null;
+    const nameLen = buf.readUInt16LE(off + 28);
+    const extraLen = buf.readUInt16LE(off + 30);
+    const commentLen = buf.readUInt16LE(off + 32);
+    const localOff = buf.readUInt32LE(off + 42);
+    const name = buf.slice(off + 46, off + 46 + nameLen).toString('utf8');
+    const method = buf.readUInt16LE(localOff + 8);
+    const compSize = buf.readUInt32LE(localOff + 18);
+    const lNameLen = buf.readUInt16LE(localOff + 26);
+    const lExtraLen = buf.readUInt16LE(localOff + 28);
+    const dataStart = localOff + 30 + lNameLen + lExtraLen;
+    const data = buf.slice(dataStart, dataStart + compSize);
+    out[name] = method === 8 ? zlib.inflateRawSync(data) : data;
+    off += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+// ================= 备份(B3 / B2) =================
+function quoteSql(str) { return "'" + String(str).replace(/'/g, "''") + "'"; }
+function takeSnapshot() {
+  if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const base = new Date().toISOString().replace(/[-:T]/g, '').replace(/\..+$/, '');
+  let file = path.join(BACKUP_DIR, 'brick-' + base + '.db');
+  let n = 2;
+  while (fs.existsSync(file)) {
+    file = path.join(BACKUP_DIR, 'brick-' + base + '-' + n + '.db');
+    n++;
+  }
+  db.exec('VACUUM INTO ' + quoteSql(file));
+  // 轮转:保留最近 BACKUP_KEEP 份
+  const list = fs.readdirSync(BACKUP_DIR).filter(function (f) { return /^brick-.*\.db$/.test(f); }).sort().reverse();
+  list.slice(BACKUP_KEEP).forEach(function (f) {
+    try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch (e) { /* ignore */ }
+  });
+  return file;
+}
+
+// ================= HTTP =================
 function sendJson(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
 }
-
+function readBody(req) {
+  return new Promise(function (resolve, reject) {
+    const chunks = [];
+    req.on('data', function (c) { chunks.push(c); if (chunks.reduce(function (s, x) { return s + x.length; }, 0) > 200 * 1024 * 1024) req.destroy(); });
+    req.on('end', function () { resolve(Buffer.concat(chunks)); });
+    req.on('error', reject);
+  });
+}
 function serveStatic(req, res, urlPath) {
   let p;
-  try {
-    p = decodeURIComponent(urlPath);
-  } catch (e) {
-    p = urlPath;
-  }
+  try { p = decodeURIComponent(urlPath); } catch (e) { p = urlPath; }
   if (p === '/' || p === '\\' || p === '') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC, p));
   if (file !== PUBLIC && !file.startsWith(PUBLIC + path.sep)) {
@@ -87,7 +371,7 @@ function serveStatic(req, res, urlPath) {
     res.end('403 Forbidden');
     return;
   }
-  fs.readFile(file, (err, buf) => {
+  fs.readFile(file, function (err, buf) {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('404 Not Found: ' + urlPath);
@@ -99,60 +383,103 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async function (req, res) {
   const url = new URL(req.url, 'http://' + (req.headers.host || '127.0.0.1'));
   const p = url.pathname;
-
-  // ---- 数据 API ----
-  if (p === '/api/data') {
-    if (req.method === 'GET') {
-      sendJson(res, 200, readData());
-      return;
-    }
-    if (req.method === 'PUT') {
-      let body = '';
-      req.on('data', (c) => {
-        body += c;
-        if (body.length > 100 * 1024 * 1024) req.destroy();
-      });
-      req.on('end', () => {
-        try {
-          const obj = JSON.parse(body);
-          if (!obj || typeof obj !== 'object' || !Array.isArray(obj.materials)) {
-            sendJson(res, 400, { ok: false, error: '数据结构不合法' });
-            return;
-          }
-          writeData(obj);
-          sendJson(res, 200, { ok: true });
-        } catch (e) {
-          sendJson(res, 400, { ok: false, error: String(e.message || e) });
+  try {
+    // ---- 数据 API(与前端 Store 兼容) ----
+    if (p === '/api/data') {
+      if (req.method === 'GET') {
+        sendJson(res, 200, assembleBlob());
+        return;
+      }
+      if (req.method === 'PUT') {
+        const raw = await readBody(req);
+        let blob;
+        try { blob = JSON.parse(raw.toString('utf8')); } catch (e) { sendJson(res, 400, { ok: false, error: '数据结构不合法' }); return; }
+        if (!blob || typeof blob !== 'object' || !Array.isArray(blob.materials)) {
+          sendJson(res, 400, { ok: false, error: '数据结构不合法' });
+          return;
         }
-      });
+        ingestBlob(blob);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+    }
+    if (p === '/api/reset' && req.method === 'POST') {
+      db.exec('PRAGMA foreign_keys=OFF;');
+      db.exec('BEGIN IMMEDIATE;');
+      try {
+        db.exec('DELETE FROM estimate_rows; DELETE FROM estimates; DELETE FROM product_recipe; DELETE FROM products; DELETE FROM materials;');
+        seedMaterials();
+        metaSet('seq.product', '0');
+        metaSet('seq.estimate', '0');
+        db.exec('COMMIT;');
+      } catch (e) { db.exec('ROLLBACK;'); throw e; } finally { db.exec('PRAGMA foreign_keys=ON;'); }
+      sendJson(res, 200, { ok: true });
       return;
     }
-  }
 
-  // ---- 恢复初始种子数据(仅材料) ----
-  if (p === '/api/reset' && req.method === 'POST') {
-    writeData(seedData());
-    sendJson(res, 200, { ok: true });
-    return;
-  }
+    // ---- 备份:在线快照(B3) ----
+    if (p === '/api/db/backup' && req.method === 'POST') {
+      const file = takeSnapshot();
+      sendJson(res, 200, { ok: true, file: path.basename(file) });
+      return;
+    }
+    // ---- 备份:导出 zip(B2) ----
+    if (p === '/api/db/export' && req.method === 'POST') {
+      const zip = buildZip([
+        { name: 'brick-data.json', data: Buffer.from(JSON.stringify(assembleBlob(), null, 2), 'utf8') },
+        { name: 'brick-meta.json', data: Buffer.from(JSON.stringify({ app: 'brick-cost', version: 2, exportedAt: new Date().toISOString() }, null, 2), 'utf8') }
+      ]);
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').replace(/\..+$/, '');
+      res.writeHead(200, {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': 'attachment; filename="brick-data-' + ts + '.zip"'
+      });
+      res.end(zip);
+      return;
+    }
+    // ---- 备份:导入(B2,zip 或原始 JSON 回灌;导入前自动快照) ----
+    if (p === '/api/db/import' && req.method === 'POST') {
+      const raw = await readBody(req);
+      let blob = null;
+      if (raw.length > 2 && raw[0] === 0x50 && raw[1] === 0x4b) {
+        const entries = parseZip(raw);
+        const dataEntry = entries && (entries['brick-data.json'] || entries['data.json']);
+        if (dataEntry) { try { blob = JSON.parse(dataEntry.toString('utf8')); } catch (e) { blob = null; } }
+        if (!blob) { sendJson(res, 400, { ok: false, error: 'zip 中未找到有效的 brick-data.json' }); return; }
+      } else {
+        try { blob = JSON.parse(raw.toString('utf8')); } catch (e) { sendJson(res, 400, { ok: false, error: '导入内容不是合法 JSON/zip' }); return; }
+      }
+      if (!blob || !Array.isArray(blob.materials)) { sendJson(res, 400, { ok: false, error: '导入数据结构不合法' }); return; }
+      takeSnapshot(); // 导入前先自动备份当前数据
+      ingestBlob(blob);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
 
-  // ---- 静态资源 ----
-  serveStatic(req, res, p);
+    // ---- 静态资源 ----
+    serveStatic(req, res, p);
+  } catch (e) {
+    sendJson(res, 500, { ok: false, error: String(e && e.message ? e.message : e) });
+  }
 });
 
-ensureData();
-server.listen(PORT, () => {
+// ================= 启动 =================
+openDb();
+migrateLegacy();
+ensureSeed();
+server.listen(PORT, function () {
   console.log('==============================================');
-  console.log('  砖成本材料预算 · 成本估算系统');
+  console.log('  砖成本材料预算 · 成本估算系统(SQLite 版)');
   console.log('  请用浏览器打开: http://127.0.0.1:' + PORT);
-  console.log('  数据文件: ' + DATA_FILE);
+  console.log('  数据库文件: ' + DB_FILE);
+  console.log('  备份目录: ' + BACKUP_DIR);
   console.log('==============================================');
 });
 
-server.on('error', (e) => {
+server.on('error', function (e) {
   if (e.code === 'EADDRINUSE') {
     console.error('端口 ' + PORT + ' 已被占用,请关闭占用程序或用 PORT=其他端口 重新启动。');
     process.exit(1);

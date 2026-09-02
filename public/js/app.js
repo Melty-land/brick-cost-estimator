@@ -1024,7 +1024,60 @@
         clearGridOverrides('材料行结构已变化,已清空公式覆盖');
         renderEstimateEditor();
         break;
+      case 'db-snapshot':
+        fetch('/api/db/backup', { method: 'POST' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (j.ok) toast('快照备份完成:' + j.file);
+            else toast('快照失败:' + (j.error || ''));
+          }).catch(function () { toast('快照失败:无法连接服务'); });
+        break;
+      case 'db-export': {
+        fetch('/api/db/export', { method: 'POST' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return Promise.all([r.blob(), Promise.resolve(r.headers.get('Content-Disposition') || '')]);
+          })
+          .then(function (pair) {
+            const blob = pair[0], cd = pair[1];
+            const m = /filename="([^"]+)"/.exec(cd);
+            const name = m ? m[1] : 'brick-data.zip';
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
+            toast('已导出:' + name);
+          }).catch(function () { toast('导出失败:无法连接服务'); });
+        break;
+      }
+      case 'db-import':
+        $('#import-file').click();
+        break;
     }
+  });
+
+  // 导入文件选择后确认
+  document.addEventListener('change', function (e) {
+    const f = $('#import-file');
+    if (!f || !e.target || e.target !== f || !f.files || !f.files.length) return;
+    const file = f.files[0];
+    const doImport = function () {
+      const reader = new FileReader();
+      reader.onload = function () {
+        fetch('/api/db/import', { method: 'POST', body: reader.result })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            f.value = '';
+            if (j.ok) { toast('导入成功,即将刷新数据'); setTimeout(function () { location.reload(); }, 600); }
+            else toast('导入失败:' + (j.error || ''));
+          }).catch(function () { f.value = ''; toast('导入失败:无法连接服务'); });
+      };
+      reader.readAsArrayBuffer(file);
+    };
+    showConfirm('确认导入数据', '导入将覆盖当前业务数据(材料/产品/估算单)。导入前系统会自动做一次快照备份,可随时恢复。确定导入文件「' + file.name + '」吗?', doImport, function () { f.value = ''; });
   });
 
   // 退出编辑器三选弹窗 / 确认弹窗按钮

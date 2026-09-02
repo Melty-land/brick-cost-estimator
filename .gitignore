@@ -4,3 +4,12 @@
 .e2e3/
 *.log
 npm-debug.log*
+data/brick.db
+data/brick.db-shm
+data/brick.db-wal
+data/backups/
+data/users.json
+data/tokens.json
+README-restart.md
+restart-server.ps1
+server.pid

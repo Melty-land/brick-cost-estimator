@@ -31,6 +31,10 @@ body {
 }
 .tab:hover { background: rgba(255,255,255,.15); }
 .tab.active { background: #fff; color: #1f2d3d; border-color: #fff; font-weight: 600; }
+.sysbar { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: #d7dee8; }
+.sysbar button { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.35); color: #fff; padding: 3px 10px; }
+.sysbar button:hover { background: rgba(255,255,255,.25); }
+.sysbar-hint { opacity: .75; }
 
 main { max-width: 1280px; margin: 16px auto; padding: 0 16px; }
 

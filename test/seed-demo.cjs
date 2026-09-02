@@ -4,6 +4,7 @@
  */
 'use strict';
 
+const path = require('path');
 const API = 'http://127.0.0.1:8237/api/data';
 
 const data = {
@@ -86,6 +87,9 @@ async function main() {
     body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error('PUT failed: ' + r.status);
+  // 同步镜像一份 data.json(供直接读盘的单测使用;运行以 SQLite 为准)
+  const fs = require('fs');
+  fs.writeFileSync(path.join(__dirname, '..', 'data', 'data.json'), JSON.stringify(data, null, 2), 'utf8');
   console.log('✓ 演示数据已重置:材料 11 种、产品 1 个、估算单 2 个');
 }
 main().catch((e) => { console.error('失败:', e.message); process.exit(1); });

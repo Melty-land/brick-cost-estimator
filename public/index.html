@@ -11,7 +11,7 @@
   <header class="app-header">
     <div class="app-title">
       <h1>浙江陆创新材料科技有限公司 · 砖成本材料预算系统</h1>
-      <div class="app-sub">本地 Web 版 —— 数据自动保存于 data/data.json</div>
+      <div class="app-sub">本地 Web 版 —— 数据存储于 SQLite(data/brick.db),支持快照/导出备份</div>
     </div>
     <nav id="tabs" class="tabs">
       <button class="tab active" data-view="materials">材料管理</button>
@@ -20,6 +20,14 @@
       <button class="tab" data-view="charts">图表预览</button>
       <button class="tab" data-view="compare">历史对比</button>
     </nav>
+    <div class="sysbar">
+      <span>数据备份:</span>
+      <button data-action="db-snapshot">快照备份</button>
+      <button data-action="db-export">导出备份文件</button>
+      <button data-action="db-import">导入恢复</button>
+      <input id="import-file" type="file" accept=".zip,.json" hidden>
+      <span class="sysbar-hint">快照存于 data/backups/;导出为 zip 单文件,可拷走/上传网盘;导入会先自动快照再覆盖。</span>
+    </div>
   </header>
 
   <main>
