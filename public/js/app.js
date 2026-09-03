@@ -1035,17 +1035,20 @@
         renderEstimateEditor();
         break;
       case 'db-snapshot':
-        fetch('/api/db/backup', { method: 'POST' })
+        Store.authedFetch('/api/db/backup', { method: 'POST' })
           .then(function (r) { return r.json(); })
           .then(function (j) {
             if (j.ok) toast('快照备份完成:' + j.file);
-            else toast('快照失败:' + (j.error || ''));
+            else if (j.error) { toast('快照失败:' + j.error); if (j.error.indexOf('登录') >= 0 || j.error.indexOf('会话') >= 0) handleAuthExpired(); }
+            else toast('快照失败:HTTP ' + (r.status || ''));
           }).catch(function () { toast('快照失败:无法连接服务'); });
         break;
       case 'db-export': {
-        fetch('/api/db/export', { method: 'POST' })
+        Store.authedFetch('/api/db/export', { method: 'POST' })
           .then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
+            if (!r.ok) {
+              return r.json().then(function (j) { throw new Error((j && j.error) || 'HTTP ' + r.status); });
+            }
             return Promise.all([r.blob(), Promise.resolve(r.headers.get('Content-Disposition') || '')]);
           })
           .then(function (pair) {
@@ -1060,7 +1063,10 @@
             a.remove();
             setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
             toast('已导出:' + name);
-          }).catch(function () { toast('导出失败:无法连接服务'); });
+          }).catch(function (err) {
+            if (err && err.message && (err.message.indexOf('登录') >= 0 || err.message.indexOf('会话') >= 0)) handleAuthExpired();
+            toast('导出失败:' + (err && err.message ? err.message : '无法连接服务'));
+          });
         break;
       }
       case 'db-import':
@@ -1123,12 +1129,15 @@
     const doImport = function () {
       const reader = new FileReader();
       reader.onload = function () {
-        fetch('/api/db/import', { method: 'POST', body: reader.result })
+        Store.authedFetch('/api/db/import', { method: 'POST', body: reader.result })
           .then(function (r) { return r.json(); })
           .then(function (j) {
             f.value = '';
             if (j.ok) { toast('导入成功,即将刷新数据'); setTimeout(function () { location.reload(); }, 600); }
-            else toast('导入失败:' + (j.error || ''));
+            else {
+              if (j.error && (j.error.indexOf('登录') >= 0 || j.error.indexOf('会话') >= 0)) handleAuthExpired();
+              toast('导入失败:' + (j.error || ''));
+            }
           }).catch(function () { f.value = ''; toast('导入失败:无法连接服务'); });
       };
       reader.readAsArrayBuffer(file);

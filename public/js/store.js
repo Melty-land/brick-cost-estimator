@@ -18,18 +18,23 @@
       else root.localStorage.removeItem(TOKEN_KEY);
     },
 
-    /** 通用请求(自动携带 Authorization) */
-    async req(url, opts) {
+    /** 带 Authorization 的原始 fetch(通用底层;备份导出等需要 blob/原始体时直接用) */
+    authedFetch(url, opts) {
       opts = opts || {};
       var headers = Object.assign({}, opts.headers || {});
       if (opts.json !== undefined) headers['Content-Type'] = 'application/json';
       var t = this.token;
       if (t) headers.Authorization = 'Bearer ' + t;
-      var r = await fetch(url, {
+      return fetch(url, {
         method: opts.method || (opts.json !== undefined || opts.body ? 'POST' : 'GET'),
         headers: headers,
         body: opts.body !== undefined ? opts.body : (opts.json !== undefined ? JSON.stringify(opts.json) : undefined)
       });
+    },
+
+    /** 通用 JSON 请求(自动携带 Authorization;非 2xx 抛错) */
+    async req(url, opts) {
+      var r = await this.authedFetch(url, opts);
       var data = null;
       try { data = await r.json(); } catch (e) { /* 非 JSON */ }
       if (!r.ok) {
