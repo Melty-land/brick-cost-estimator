@@ -321,10 +321,11 @@
     var sheet = buildSheet(est);
     var addrCells = sheet.addrCells;
 
-    // 公式单元格集合 = 默认公式列 + 被覆盖为公式的单元格
+    // 公式单元格集合 = 默认公式列 + 被覆盖为公式的单元格(被静态覆盖 v 的格子不再按公式求值)
     var formulaAddrs = [];
     Object.keys(addrCells).forEach(function (a) {
       var d = addrCells[a];
+      if (overrides.v[a] !== undefined) return; // 静态覆盖:直接以常量求值,不走公式
       if (d.kind === 'formula' || overrides.f[a] !== undefined) formulaAddrs.push(a);
     });
     var effF = {};
@@ -361,6 +362,13 @@
 
     var values = {};
     formulaAddrs.forEach(function (a) { if (inCycle[a]) values[a] = Formula.err('#CYCLE!'); });
+    // 静态覆盖格:先以常量写入 values,依赖它的公式与派生回写都读到覆盖值
+    Object.keys(addrCells).forEach(function (a) {
+      if (overrides.v[a] !== undefined) {
+        var tv = String(overrides.v[a]);
+        values[a] = NUM_TEXT.test(tv) ? Number(tv) : (tv === '' ? null : tv);
+      }
+    });
 
     var ctx = {
       getValue: function (ref) {

@@ -75,6 +75,14 @@
     toastTimer = setTimeout(function () { el.hidden = true; }, 2200);
   }
 
+  /** 保存并刷新/提示;统一处理失败与登录过期(避免未捕获的 Promise 拒绝) */
+  function saveAndRefresh(okFn) {
+    Store.save().then(okFn || function () {}).catch(function (err) {
+      toast('保存失败:' + (err && err.message ? err.message : '未知错误'));
+      if (err && (err.status === 401 || err.status === 403)) handleAuthExpired();
+    });
+  }
+
   // ---------- 视图切换(hash 路由,支持深链) ----------
   function switchView(name) {
     if (name === 'users' && (!currentUser || currentUser.role !== 'admin')) {
@@ -94,6 +102,7 @@
     else if (name === 'users') renderUsers();
   }
 
+  let lastEditorHash = null; // 记录当前编辑的估算单 hash(用于 hashchange 脏守卫还原)
   /** 根据 location.hash 切换视图:#materials / #products / #estimates / #compare / #users / #estimate/<id> / #new-estimate[/<产品id>] */
   function applyHash() {
     // 未登录或数据未加载(登出/会话过期后 hash 变化)时不渲染业务视图
@@ -102,6 +111,20 @@
     const parts = h.split('/');
     const name = parts[0];
     const id = parts[1];
+    // 直接 hash 变化(浏览器后退/手动改地址)离开有未保存改动的编辑器时,弹三选,取消则还原
+    const editorEl = document.getElementById('view-editor');
+    if (editorEl && !editorEl.hidden && estDraft && gridDirty &&
+        !(name === 'estimate' || name === 'new-estimate') && lastEditorHash && lastEditorHash !== location.hash) {
+      gridPendingNav = location.hash;
+      const missing = requiredMissing();
+      $('#exit-missing').textContent = missing.length
+        ? '⚠ 尚有 ' + missing.length + ' 项必填未填(如 ' + missing.slice(0, 3).map(function (x) { return x.label + ' ' + x.addr; }).join('、') + '),此状态下只能保存为草稿。'
+        : '✓ 必填项已填完,可保存为可用表格。';
+      $('#exit-modal').hidden = false;
+      // 先还原到原编辑器 hash;用户在弹窗中的选择由 exitChoice 处理(存草稿/保存/不保存)
+      history.replaceState(null, '', location.pathname + location.search + lastEditorHash);
+      return;
+    }
     if (name === 'estimate' && id) { openEstimateEditor(id); return; }
     if (name === 'new-estimate') { openEstimateEditor(null, id); return; }
     if (name === 'editor') { estDraft = null; location.hash = '#estimates'; return; }
@@ -274,6 +297,7 @@
     gridCache = null;
     gridDirty = false;   // 打开/重新加载时无未保存改动
     gridPendingNav = null;
+    lastEditorHash = location.hash || ('#estimate/' + (estDraft.id || ''));
     switchView('editor');
     renderEstimateEditor();
   }
@@ -481,10 +505,10 @@
     if (!inputEl || !gridSel || !gridCache) return;
     const def = gridCache.addrCells[gridSel];
     if (!def) return;
-    if (inputEl.value === fxContent(def)) return; // 未改动,跳过(避免把默认公式误存为覆盖)
-    gridDirty = true;
     const text = inputEl.value;
     const t = String(text).trim();
+    if (t === fxContent(def)) return; // 未改动(含首尾空白),跳过
+    gridDirty = true;
     if (t.charAt(0) === '=') {
       try { Formula.parse(t.slice(1)); } catch (e) { /* 允许保存;格子显示 #PARSE! */ }
       delete gridOverV[gridSel];
@@ -492,11 +516,11 @@
     } else if (def.kind === 'input') {
       delete gridOverF[gridSel];
       delete gridOverV[gridSel];
-      setByPath(estDraft, def.path, text === '' ? '' : (/^-?\d*\.?\d+$/.test(text) ? Number(text) : text));
+      setByPath(estDraft, def.path, t === '' ? '' : (/^-?\d*\.?\d+$/.test(t) ? Number(t) : t));
     } else {
       delete gridOverF[gridSel];
-      if (text === '') delete gridOverV[gridSel];
-      else gridOverV[gridSel] = text;
+      if (t === '') delete gridOverV[gridSel];
+      else gridOverV[gridSel] = t;
     }
     gridEval();
     paintAll(gridCache);
@@ -635,6 +659,8 @@
    * @returns boolean 是否真正写入(false=校验不通过)
    */
   function saveEstimate(status, asCopy, after) {
+    // 先把公式栏未回车的内容提交到草稿,避免"输入了却没保存"
+    if (document.getElementById('fx-input') && !document.getElementById('fx-input').disabled) commitFx();
     const missing = requiredMissing();
     if (status === 'ready' && missing.length) {
       toast('还有 ' + missing.length + ' 项必填未填写(如 ' + missing[0].label + ' ' + missing[0].addr + '),只能保存为草稿');
@@ -651,7 +677,7 @@
         toast((status === 'ready' ? '已保存为可用表格' : '已保存为草稿') + (asCopy ? '(副本)' : ''));
         if (after) location.hash = after;
         else location.hash = '#estimates';
-      }).catch(function (err) { toast('保存失败:' + err.message); });
+      }).catch(function (err) { toast('保存失败:' + err.message); if (err.status === 401 || err.status === 403) handleAuthExpired(); });
     }
     if (issues.length) {
       showConfirm('相邻批次衔接提醒', issues.join('\n') + '\n\n仍要保存吗?', commit, function () {});
@@ -665,7 +691,10 @@
   function requestLeave(hashTarget) {
     const editorEl = document.getElementById('view-editor');
     const inEditor = editorEl && !editorEl.hidden && estDraft;
-    if (!inEditor || !gridDirty) { performNav(hashTarget); return true; }
+    if (!inEditor) { performNav(hashTarget); return true; }
+    // 提交公式栏未回车的内容:若有实质改动,视为脏数据
+    if (document.getElementById('fx-input') && !document.getElementById('fx-input').disabled) commitFx();
+    if (!gridDirty) { performNav(hashTarget); return true; }
     gridPendingNav = hashTarget;
     const missing = requiredMissing();
     $('#exit-missing').textContent = missing.length
@@ -709,7 +738,7 @@
         return '<th>' + esc(x.e.name || x.e.id) + '</th>';
       }).join('') + '</tr>';
       const fieldRow = function (label, fn) {
-        return '<tr><td class="l">' + label + '</td>' + comps.map(function (x) {
+        return '<tr><td class="l">' + esc(label) + '</td>' + comps.map(function (x) {
           return '<td>' + fn(x) + '</td>';
         }).join('') + '</tr>';
       };
@@ -876,7 +905,7 @@
       const m = Store.materialById(el.dataset.zoneOf);
       if (m) {
         m.zone = el.value;
-        Store.save().then(function () { toast('已更新所属区'); });
+        saveAndRefresh(function () { toast('已更新所属区'); });
       }
       return;
     }
@@ -917,14 +946,14 @@
         const zone = $('#new-mat-zone').value;
         if (!name) { toast('请输入材料名称'); return; }
         Store.addMaterial(name, zone);
-        Store.save().then(function () { renderMaterials(); toast('已添加材料:' + name); });
+        saveAndRefresh(function () { renderMaterials(); toast('已添加材料:' + name); });
         break;
       }
       case 'del-material': {
         if (!confirm('确认删除该材料?')) return;
         const r = Store.deleteMaterial(id);
         if (!r.ok) { toast(r.reason); return; }
-        Store.save().then(function () { renderMaterials(); toast('已删除'); });
+        saveAndRefresh(function () { renderMaterials(); toast('已删除'); });
         break;
       }
       case 'new-product':
@@ -943,7 +972,7 @@
       case 'del-product': {
         if (!confirm('确认删除该产品?其历史估算单保留快照,但解除关联。')) return;
         Store.deleteProduct(id);
-        Store.save().then(function () { renderProducts(); toast('已删除产品'); });
+        saveAndRefresh(function () { renderProducts(); toast('已删除产品'); });
         break;
       }
       case 'pf-add-row': {
@@ -967,7 +996,7 @@
           } else {
             Store.addProduct(pname, productFormDraft.code, JSON.parse(JSON.stringify(productFormDraft.recipe)));
           }
-          Store.save().then(function () {
+          saveAndRefresh(function () {
             editingProductId = null;
             productFormDraft = null;
             renderProducts();
@@ -992,12 +1021,12 @@
         break;
       case 'clone-estimate':
         Store.cloneEstimate(id);
-        Store.save().then(function () { renderEstimates(); toast('已复制为新估算单'); });
+        saveAndRefresh(function () { renderEstimates(); toast('已复制为新估算单'); });
         break;
       case 'del-estimate':
         if (!confirm('确认删除该估算单?')) return;
         Store.deleteEstimate(id);
-        Store.save().then(function () { renderEstimates(); toast('已删除'); });
+        saveAndRefresh(function () { renderEstimates(); toast('已删除'); });
         break;
       case 'editor-back':
         requestLeave('#estimates');
@@ -1036,11 +1065,12 @@
         break;
       case 'db-snapshot':
         Store.authedFetch('/api/db/backup', { method: 'POST' })
-          .then(function (r) { return r.json(); })
-          .then(function (j) {
+          .then(function (resp) { return resp.json().then(function (j) { return { j: j, status: resp.status }; }); })
+          .then(function (pair) {
+            const j = pair.j;
             if (j.ok) toast('快照备份完成:' + j.file);
             else if (j.error) { toast('快照失败:' + j.error); if (j.error.indexOf('登录') >= 0 || j.error.indexOf('会话') >= 0) handleAuthExpired(); }
-            else toast('快照失败:HTTP ' + (r.status || ''));
+            else toast('快照失败:HTTP ' + pair.status);
           }).catch(function () { toast('快照失败:无法连接服务'); });
         break;
       case 'db-export': {
@@ -1197,9 +1227,8 @@
     if (toggle) { e.preventDefault(); showAuth(authMode === 'login' ? 'register' : 'login'); return; }
     if (e.target.closest('#btn-logout')) {
       Store.logout().then(function () {
+        resetSessionState();
         currentUser = null;
-        data = null;
-        estDraft = null;
         $('#user-area').hidden = true;
         $('#tab-users').hidden = true;
         const impBtn = $('#sysbar-import');
@@ -1264,6 +1293,7 @@
     applyHash();
   }
   function handleAuthExpired() {
+    resetSessionState();
     Store.token = '';
     currentUser = null;
     $('#user-area').hidden = true;
@@ -1272,6 +1302,24 @@
     if (impBtn) impBtn.hidden = true;
     showAuth('login');
     toast('登录已过期,请重新登录');
+  }
+
+  /** 清空当前会话的所有内存状态(登出/会话过期共用,避免残留给下一个登录用户) */
+  function resetSessionState() {
+    data = null;
+    estDraft = null;
+    gridOverF = {};
+    gridOverV = {};
+    gridSel = null;
+    gridCache = null;
+    gridDirty = false;
+    gridPendingNav = null;
+    lastEditorHash = null;
+    compareSel.clear();
+    chartEstId = null;
+    chartMatMode = 'amount';
+    productFormDraft = null;
+    editingProductId = null;
   }
 
   // ---------- 用户管理(仅 admin) ----------
@@ -1315,9 +1363,14 @@
   // ---------- 启动 ----------
   async function boot() {
     // 自动化测试通道:?autologin=1 直接以内置 admin 登录(仅测试/演示用)
-    if (!Store.token && /[?&]autologin=1/.test(location.search)) {
-      try { currentUser = await Store.login('admin', 'admin123'); }
-      catch (err) { /* 继续走正常登录页 */ }
+    if (!Store.token && /(?:^|[?&])autologin=1(?:&|$)/.test(location.search)) {
+      try {
+        currentUser = await Store.login('admin', 'admin123');
+        // 登录成功后移除 autologin 参数,避免退出登录后刷新又自动登回 admin
+        const url = new URL(location.href);
+        url.searchParams.delete('autologin');
+        history.replaceState(null, '', url.pathname + url.search + url.hash);
+      } catch (err) { /* 继续走正常登录页 */ }
     }
     if (!currentUser && Store.token) {
       try { currentUser = await Store.me(); }

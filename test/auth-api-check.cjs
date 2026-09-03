@@ -26,6 +26,14 @@ async function main() {
     await call('api/users/' + u, 'DELETE', null, adminToken);
   }
 
+  // 0) 非法用户名注册应被拒绝(含 / ? # % 空格或超长;修复:曾可注册含 / 的用户名致无法管理)
+  const badU = await call('api/auth/register', 'POST', { username: 'a/b?c', password: '12345678' });
+  assert(badU.status === 400, '含斜杠用户名应 400,实得 ' + badU.status);
+  const badU2 = await call('api/auth/register', 'POST', { username: 'x y', password: '12345678' });
+  assert(badU2.status === 400, '含空格用户名应 400');
+  const badU3 = await call('api/auth/register', 'POST', { username: '太'.repeat(40), password: '12345678' });
+  assert(badU3.status === 400, '超长用户名应 400');
+
   // 1) 错误口令 -> 401
   const bad = await call('api/auth/login', 'POST', { username: 'admin', password: 'wrong' });
   assert(bad.status === 401, '错误口令应 401');

@@ -89,8 +89,12 @@ async function main() {
   }
   const toastText = () => evalJS(`(() => { const t = document.getElementById('toast'); return t && !t.hidden ? t.textContent : ''; })()`);
 
-  if (!(await waitFor(`!!document.querySelector('[data-action="db-snapshot"]') && !document.getElementById('auth-screen') || (document.getElementById('auth-screen') && getComputedStyle(document.getElementById('auth-screen')).display === 'none')`))) {
-    console.error('✗ 页面未就绪'); process.exit(1);
+  if (!(await waitFor(`(() => {
+    const s = document.getElementById('auth-screen');
+    const authHidden = !s || getComputedStyle(s).display === 'none';
+    return !!document.querySelector('[data-action="db-snapshot"]') && authHidden;
+  })()`))) {
+    console.error('✗ 页面未就绪(auth 层未隐藏或快照按钮缺失)'); process.exit(1);
   }
   await sleep(500);
 

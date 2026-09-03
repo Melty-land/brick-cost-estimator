@@ -230,6 +230,15 @@ function ensureSeed() {
 // ================= 登录 / 用户(users & sessions 表) =================
 const TOKEN_TTL = 7 * 24 * 3600 * 1000;
 
+// 用户名允许:中文/字母/数字/下划线/点/短横线(1~30 字符)。
+// 禁止 / ? # % & = 等会破坏 URL 路径或编码的字符,否则用户管理接口无法按路径定位该用户。
+const USERNAME_RE = /^[\u4e00-\u9fa5A-Za-z0-9_.-]{1,30}$/;
+function usernameError(name) {
+  if (!name) return '用户名不能为空';
+  if (name.length > 30) return '用户名最长 30 个字符';
+  if (!USERNAME_RE.test(name)) return '用户名仅支持中文、字母、数字、下划线、点、短横线,且不能含 / ? # % 等字符';
+  return null;
+}
 function hashPw(pw, salt) { return crypto.scryptSync(String(pw), salt, 32).toString('hex'); }
 function saltHex() { return crypto.randomBytes(16).toString('hex'); }
 function userPublic(u) {
@@ -414,6 +423,7 @@ function takeSnapshot() {
 
 // ================= HTTP =================
 function sendJson(res, code, obj) {
+  if (res.destroyed || res.writableEnded) return; // 客户端已断开/已响应则不再写
   const body = JSON.stringify(obj);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
@@ -421,9 +431,19 @@ function sendJson(res, code, obj) {
 function readBody(req) {
   return new Promise(function (resolve, reject) {
     const chunks = [];
-    req.on('data', function (c) { chunks.push(c); if (chunks.reduce(function (s, x) { return s + x.length; }, 0) > 200 * 1024 * 1024) req.destroy(); });
-    req.on('end', function () { resolve(Buffer.concat(chunks)); });
+    let tooBig = false;
+    req.on('data', function (c) {
+      chunks.push(c);
+      if (chunks.reduce(function (s, x) { return s + x.length; }, 0) > 200 * 1024 * 1024) {
+        tooBig = true;
+        req.destroy();
+      }
+    });
+    req.on('end', function () { if (!tooBig) resolve(Buffer.concat(chunks)); });
     req.on('error', reject);
+    req.on('close', function () {
+      if (tooBig) reject(new Error('请求体过大(超过 200MB)'));
+    });
   });
 }
 async function parseJsonBody(req) {
@@ -453,15 +473,22 @@ function serveStatic(req, res, urlPath) {
 }
 
 const server = http.createServer(async function (req, res) {
-  const url = new URL(req.url, 'http://' + (req.headers.host || '127.0.0.1'));
-  const p = url.pathname;
+  let url, p;
+  try {
+    url = new URL(req.url, 'http://' + (req.headers.host || '127.0.0.1'));
+    p = url.pathname;
+  } catch (e) {
+    sendJson(res, 400, { ok: false, error: '请求 URL 不合法' });
+    return;
+  }
   try {
     // ---- 认证:注册 / 登录 / 会话 ----
     if (p === '/api/auth/register' && req.method === 'POST') {
       const body = await parseJsonBody(req);
       const username = String(body.username || '').trim();
       const password = String(body.password || '');
-      if (!username) { sendJson(res, 400, { ok: false, error: '用户名不能为空' }); return; }
+      const uErr = usernameError(username);
+      if (uErr) { sendJson(res, 400, { ok: false, error: uErr }); return; }
       if (password.length < 6) { sendJson(res, 400, { ok: false, error: '密码至少 6 位' }); return; }
       const exist = db.prepare('SELECT COUNT(*) AS c FROM users WHERE username=?').get(username).c;
       if (exist) { sendJson(res, 409, { ok: false, error: '用户名已存在' }); return; }
@@ -521,14 +548,15 @@ const server = http.createServer(async function (req, res) {
       const m = /^\/api\/users\/([^/]+)$/.exec(p);
       const name = m ? decodeURIComponent(m[1]) : null;
       if (p === '/api/users' && req.method === 'GET') {
-        const users = db.prepare('SELECT username,nickname,role,created_at FROM users ORDER BY created_at').all().map(userPublic);
+        const users = db.prepare('SELECT username,nickname,role,status,created_at FROM users ORDER BY created_at').all().map(userPublic);
         sendJson(res, 200, { ok: true, users: users });
         return;
       }
       if (p === '/api/users' && req.method === 'POST') {
         const body = await parseJsonBody(req);
         const username = String(body.username || '').trim();
-        if (!username) { sendJson(res, 400, { ok: false, error: '用户名不能为空' }); return; }
+        const uErr = usernameError(username);
+        if (uErr) { sendJson(res, 400, { ok: false, error: uErr }); return; }
         if (db.prepare('SELECT COUNT(*) AS c FROM users WHERE username=?').get(username).c) {
           sendJson(res, 409, { ok: false, error: '用户名已存在' }); return;
         }
@@ -543,10 +571,24 @@ const server = http.createServer(async function (req, res) {
         const body = await parseJsonBody(req);
         const rec = db.prepare('SELECT * FROM users WHERE username=?').get(name);
         if (!rec) { sendJson(res, 404, { ok: false, error: '用户不存在' }); return; }
-        if (name === admin.username && body.role === 'user') { sendJson(res, 400, { ok: false, error: '不能把自己降为普通用户' }); return; }
+        // 目标角色/状态(未指定则保持原值)
+        const nextRole = (body.role === 'admin' || body.role === 'user') ? body.role : rec.role;
+        const nextStatus = (body.status === 'active' || body.status === 'disabled') ? body.status : (rec.status || 'active');
+        // 保护一:不能把自己降为普通用户或停用自己(否则管理员自己锁死,系统无人可管)
+        if (name === admin.username && (nextRole === 'user' || nextStatus === 'disabled')) {
+          sendJson(res, 400, { ok: false, error: '不能降级或停用自己' });
+          return;
+        }
+        // 保护二:把某位管理员降级/停用前,须确保至少还剩 1 名「启用中」的管理员
+        const wasAdmin = rec.role === 'admin' && (rec.status || 'active') !== 'disabled';
+        const becomesNonAdmin = nextRole !== 'admin' || nextStatus === 'disabled';
+        if (wasAdmin && becomesNonAdmin) {
+          const activeAdmins = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND (status IS NULL OR status<>'disabled')").get().c;
+          if (activeAdmins <= 1) { sendJson(res, 400, { ok: false, error: '至少保留一名启用中的管理员' }); return; }
+        }
         const nickname = body.nickname !== undefined ? String(body.nickname || name).slice(0, 30) : rec.nickname;
-        const role = (body.role === 'admin' || body.role === 'user') ? body.role : rec.role;
-        const status = (body.status === 'active' || body.status === 'disabled') ? body.status : (rec.status || 'active');
+        const role = nextRole;
+        const status = nextStatus;
         if (body.password && String(body.password).length >= 6) {
           const salt = saltHex();
           db.prepare('UPDATE users SET nickname=?,role=?,status=?,salt=?,hash=? WHERE username=?')
@@ -562,8 +604,8 @@ const server = http.createServer(async function (req, res) {
         if (!rec) { sendJson(res, 404, { ok: false, error: '用户不存在' }); return; }
         if (name === admin.username) { sendJson(res, 400, { ok: false, error: '不能删除自己' }); return; }
         if (rec.role === 'admin') {
-          const adminCount = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role='admin'").get().c;
-          if (adminCount <= 1) { sendJson(res, 400, { ok: false, error: '至少保留一名管理员' }); return; }
+          const activeAdmins = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND (status IS NULL OR status<>'disabled')").get().c;
+          if (activeAdmins <= 1) { sendJson(res, 400, { ok: false, error: '至少保留一名启用中的管理员' }); return; }
         }
         db.prepare('DELETE FROM users WHERE username=?').run(name);
         db.prepare('DELETE FROM sessions WHERE username=?').run(name);
@@ -677,4 +719,12 @@ server.on('error', function (e) {
     process.exit(1);
   }
   console.error('服务启动失败:', e);
+});
+
+// 兜底:个别异步异常只记录,不让整个服务进程退出
+process.on('uncaughtException', function (e) {
+  console.error('[uncaughtException]', e && e.stack ? e.stack : e);
+});
+process.on('unhandledRejection', function (e) {
+  console.error('[unhandledRejection]', e && e.stack ? e.stack : e);
 });

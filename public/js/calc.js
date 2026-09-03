@@ -69,7 +69,8 @@
     }
 
     // ---- 配比区(每锅,数量:公斤;金额:元 = 单价×数量,全表按公斤直乘不换算) ----
-    function recipeSection(sectionRows) {
+    // 配比区占比口径与网格默认公式一致:每锅×锅数 ÷ (底料Σ×底锅 + 面料Σ×面锅),跨区按锅数加权
+    function recipeSection(sectionRows, potCount, denom) {
       var qtyTotal = sectionRows.reduce(function (s, r) { return s + r.qtyPerPot; }, 0);
       var amountTotal = sectionRows.reduce(function (s, r) { return s + r.qtyPerPot * r.price; }, 0);
       return {
@@ -78,15 +79,18 @@
             id: r.id, name: r.name, zone: r.zone, idx: r.idx,
             qtyPerPot: r.qtyPerPot, price: r.price,
             amount: r.qtyPerPot * r.price,
-            ratio: safeDiv(r.qtyPerPot, qtyTotal)   // 配比区数量占比(未含锅数)
+            ratio: safeDiv(r.qtyPerPot * potCount, denom)   // 每锅×锅数 ÷ 全材料加权总和
           };
         }),
         qtyTotal: qtyTotal,
         amountTotal: amountTotal
       };
     }
-    var bottom = recipeSection(zoneRows(ZONES.BOTTOM));
-    var top = recipeSection(zoneRows(ZONES.TOP));
+    var bottomRows = zoneRows(ZONES.BOTTOM), topRows = zoneRows(ZONES.TOP);
+    var qtyPotSum = function (zs, pot) { return zs.reduce(function (s, r) { return s + r.qtyPerPot * pot; }, 0); };
+    var denomAll = qtyPotSum(bottomRows, potBottom) + qtyPotSum(topRows, potTop); // 跨区按锅数加权分母
+    var bottom = recipeSection(bottomRows, potBottom, denomAll);
+    var top = recipeSection(topRows, potTop, denomAll);
 
     // ---- 材料清单(公斤;全表公斤直乘,不换算) ----
     var list = rows.map(function (r) {

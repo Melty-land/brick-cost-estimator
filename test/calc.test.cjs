@@ -18,19 +18,20 @@ const est = {
 };
 const c = Calc.compute(est);
 
-// 底料配比:数量合计 500;占比按数量:黑水泥 200/500 = 0.4
+// 底料配比:数量合计 500
 assert.strictEqual(c.bottom.qtyTotal, 500);
-assert.strictEqual(c.bottom.rows[0].ratio, 0.4);
-assert.strictEqual(c.bottom.rows[1].ratio, 0.6);
+// 配比占比口径 = 每锅×锅数 ÷ 跨区加权总和(200×10+300×10+100×8=5800):黑水泥 2000/5800
+assert.ok(Math.abs(c.bottom.rows[0].ratio - 2000 / 5800) < 1e-12);
+assert.ok(Math.abs(c.bottom.rows[1].ratio - 3000 / 5800) < 1e-12);
 
 // 配比金额 = 单价×数量(公斤,全表不换算):黑水泥 500×200=100000;机制砂 80×300=24000
 assert.strictEqual(c.bottom.rows[0].amount, 100000);
 assert.strictEqual(c.bottom.rows[1].amount, 24000);
 assert.strictEqual(c.bottom.amountTotal, 124000);
 
-// 面料:白水泥 600×100=60000;占比 100/100=1
+// 面料:白水泥 600×100=60000;占比(跨区加权)800/5800
 assert.strictEqual(c.top.amountTotal, 60000);
-assert.strictEqual(c.top.rows[0].ratio, 1);
+assert.ok(Math.abs(c.top.rows[0].ratio - 800 / 5800) < 1e-12);
 
 // 材料清单:库存 = 上存+进料
 assert.strictEqual(c.rows[0].stock, 5);
