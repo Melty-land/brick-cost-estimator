@@ -19,6 +19,11 @@
       <button class="tab" data-view="estimates">估算单</button>
       <button class="tab" data-view="charts">图表预览</button>
       <button class="tab" data-view="compare">历史对比</button>
+      <button class="tab" data-view="users" id="tab-users" hidden>用户管理</button>
+      <span class="user-area" id="user-area" hidden>
+        <span id="user-badge"></span>
+        <button id="btn-logout">退出</button>
+      </span>
     </nav>
     <div class="sysbar">
       <span>数据备份:</span>
@@ -30,12 +35,36 @@
     </div>
   </header>
 
+  <!-- 登录 / 注册 覆盖层 -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <h2>砖成本材料预算 · 成本估算系统</h2>
+      <p class="auth-sub" id="auth-sub">请登录后使用(默认账号 admin / admin123,登录后请尽快修改密码)</p>
+      <form id="auth-form">
+        <label>用户名
+          <input id="auth-username" type="text" autocomplete="username" required>
+        </label>
+        <label>密码
+          <input id="auth-password" type="password" autocomplete="current-password" required>
+        </label>
+        <label id="auth-nickname-wrap" hidden>昵称(可选)
+          <input id="auth-nickname" type="text" autocomplete="nickname">
+        </label>
+        <p id="auth-msg" class="auth-msg"></p>
+        <button type="submit" class="primary auth-submit" id="auth-submit">登 录</button>
+      </form>
+      <p class="auth-switch" id="auth-switch">没有账号?<a href="#" id="auth-toggle">注册一个</a></p>
+      <p class="auth-note">首个注册账号自动成为管理员;其余注册为普通用户。</p>
+    </div>
+  </div>
+
   <main>
     <section id="view-materials" class="view"></section>
     <section id="view-products" class="view" hidden></section>
     <section id="view-estimates" class="view" hidden></section>
     <section id="view-charts" class="view" hidden></section>
     <section id="view-compare" class="view" hidden></section>
+    <section id="view-users" class="view" hidden></section>
     <section id="view-editor" class="view" hidden></section>
   </main>
 

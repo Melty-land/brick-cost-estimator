@@ -7,6 +7,7 @@
 
   // ---------- 状态 ----------
   let data = null;                 // 全量数据 {materials, products, estimates, seq}
+  let currentUser = null;          // 当前登录用户 {username,nickname,role}
   let currentView = 'materials';
   let editingProductId = null;     // 正在编辑的产品 id
   let productFormDraft = null;     // 产品表单草稿 {name, code, recipe:[{materialId,qtyPerPot}]}
@@ -76,6 +77,11 @@
 
   // ---------- 视图切换(hash 路由,支持深链) ----------
   function switchView(name) {
+    if (name === 'users' && (!currentUser || currentUser.role !== 'admin')) {
+      toast('仅管理员可访问用户管理');
+      location.hash = '#estimates';
+      return;
+    }
     currentView = name;
     $$('.view').forEach(function (s) { s.hidden = s.id !== 'view-' + name; });
     $$('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.view === name); });
@@ -84,10 +90,13 @@
     else if (name === 'estimates') renderEstimates();
     else if (name === 'charts') renderCharts();
     else if (name === 'compare') renderCompare();
+    else if (name === 'users') renderUsers();
   }
 
-  /** 根据 location.hash 切换视图:#materials / #products / #estimates / #compare / #estimate/<id> / #new-estimate[/<产品id>] */
+  /** 根据 location.hash 切换视图:#materials / #products / #estimates / #compare / #users / #estimate/<id> / #new-estimate[/<产品id>] */
   function applyHash() {
+    // 未登录或数据未加载(登出/会话过期后 hash 变化)时不渲染业务视图
+    if (!currentUser || !data) return;
     const h = location.hash.replace(/^#/, '');
     const parts = h.split('/');
     const name = parts[0];
@@ -95,7 +104,7 @@
     if (name === 'estimate' && id) { openEstimateEditor(id); return; }
     if (name === 'new-estimate') { openEstimateEditor(null, id); return; }
     if (name === 'editor') { estDraft = null; location.hash = '#estimates'; return; }
-    if (name === 'materials' || name === 'products' || name === 'estimates' || name === 'charts' || name === 'compare') {
+    if (name === 'materials' || name === 'products' || name === 'estimates' || name === 'charts' || name === 'compare' || name === 'users') {
       switchView(name);
       return;
     }
@@ -1056,7 +1065,53 @@
       case 'db-import':
         $('#import-file').click();
         break;
+      case 'users-add': {
+        const name = $('#new-user-name').value.trim();
+        const pw = $('#new-user-pw').value;
+        if (!name) { toast('请输入用户名'); return; }
+        if (pw.length < 6) { toast('初始密码至少 6 位'); return; }
+        Store.addUser(name, pw, $('#new-user-nick').value.trim(), $('#new-user-role').value)
+          .then(function () {
+            $('#new-user-pw').value = '';
+            renderUsers();
+            toast('已新增用户:' + name);
+          }).catch(function (err) {
+            toast('新增失败:' + err.message);
+            if (err.status === 401 || err.status === 403) handleAuthExpired();
+          });
+        break;
+      }
+      case 'users-del': {
+        const uname = btn.dataset.username;
+        if (!confirm('确认删除用户「' + uname + '」?')) return;
+        Store.deleteUser(uname)
+          .then(function () { renderUsers(); toast('已删除:' + uname); })
+          .catch(function (err) { toast('删除失败:' + err.message); if (err.status === 401 || err.status === 403) handleAuthExpired(); });
+        break;
+      }
+      case 'users-reset-pw': {
+        const uname = btn.dataset.username;
+        const pw = prompt('为「' + uname + '」设置新密码(≥6位):');
+        if (pw === null) return;
+        if (pw.length < 6) { toast('密码至少 6 位'); return; }
+        Store.updateUser(uname, { password: pw })
+          .then(function () { toast('已重置「' + uname + '」的密码'); })
+          .catch(function (err) { toast('重置失败:' + err.message); if (err.status === 401 || err.status === 403) handleAuthExpired(); });
+        break;
+      }
     }
+  });
+
+  // 角色下拉即时生效(用户管理页)
+  document.addEventListener('change', function (e) {
+    const sel = e.target.closest && e.target.closest('select[data-role-of]');
+    if (!sel) return;
+    Store.updateUser(sel.dataset.roleOf, { role: sel.value })
+      .then(function () { toast('已更新角色:' + sel.dataset.roleOf); })
+      .catch(function (err) {
+        toast('更新角色失败:' + err.message);
+        if (err.status === 401 || err.status === 403) handleAuthExpired(); else renderUsers();
+      });
   });
 
   // 导入文件选择后确认
@@ -1102,6 +1157,48 @@
     if (t) requestLeave('#' + t.dataset.view);
   });
 
+  // ---------- 登录/注册表单 ----------
+  $('#auth-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const username = $('#auth-username').value.trim();
+    const password = $('#auth-password').value;
+    const msgEl = $('#auth-msg');
+    if (!username || !password) { msgEl.textContent = '请输入用户名和密码'; return; }
+    msgEl.textContent = '';
+    try {
+      if (authMode === 'login') {
+        currentUser = await Store.login(username, password);
+        await afterAuth();
+      } else {
+        const nickname = $('#auth-nickname').value.trim();
+        const user = await Store.register(username, password, nickname);
+        $('#auth-username').value = username;
+        $('#auth-password').value = '';
+        showAuth('login');
+        msgEl.textContent = '注册成功' + (user.role === 'admin' ? '(已设为管理员)' : '') + ',请登录';
+      }
+    } catch (err) {
+      msgEl.textContent = err.message || '操作失败';
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    const toggle = e.target.closest('#auth-toggle');
+    if (toggle) { e.preventDefault(); showAuth(authMode === 'login' ? 'register' : 'login'); return; }
+    if (e.target.closest('#btn-logout')) {
+      Store.logout().then(function () {
+        currentUser = null;
+        data = null;
+        estDraft = null;
+        $('#user-area').hidden = true;
+        $('#tab-users').hidden = true;
+        location.hash = '';
+        showAuth('login');
+        toast('已退出登录');
+      });
+    }
+  });
+
   // ---------- 表格编辑器交互(单元格选择 / 公式栏回车 / Esc 还原) ----------
   document.addEventListener('click', function (e) {
     const v = document.getElementById('view-editor');
@@ -1120,24 +1217,109 @@
 
   window.addEventListener('hashchange', applyHash);
 
+  // ---------- 登录 / 注册 / 用户管理 ----------
+  let authMode = 'login';
+  function showAuth(mode) {
+    authMode = mode || 'login';
+    $('#auth-screen').style.display = 'flex';
+    $('#auth-submit').textContent = authMode === 'login' ? '登 录' : '注 册';
+    $('#auth-sub').textContent = authMode === 'login'
+      ? '请登录后使用(默认账号 admin / admin123)'
+      : '创建账号;除内置 admin 外的首个注册账号自动成为管理员';
+    $('#auth-nickname-wrap').hidden = authMode !== 'register';
+    $('#auth-msg').textContent = '';
+    $('#auth-password').type = 'password';
+    $('#auth-username').focus();
+  }
+  function hideAuth() { $('#auth-screen').style.display = 'none'; }
+  function renderUserBar() {
+    $('#user-area').hidden = false;
+    $('#user-badge').textContent = (currentUser.nickname || currentUser.username) + ' · ' + (currentUser.role === 'admin' ? '管理员' : '普通用户');
+    $('#tab-users').hidden = currentUser.role !== 'admin';
+  }
+  async function afterAuth() {
+    renderUserBar();
+    data = await Store.load();
+    hideAuth();
+    if (!location.hash) {
+      const latest = data.estimates.length ? data.estimates[data.estimates.length - 1].id : null;
+      location.hash = latest ? '#estimate/' + latest : '#estimates';
+      return;
+    }
+    applyHash();
+  }
+  function handleAuthExpired() {
+    Store.token = '';
+    currentUser = null;
+    $('#user-area').hidden = true;
+    $('#tab-users').hidden = true;
+    showAuth('login');
+    toast('登录已过期,请重新登录');
+  }
+
+  // ---------- 用户管理(仅 admin) ----------
+  function renderUsers() {
+    const v = $('#view-users');
+    Store.listUsers().then(function (users) {
+      const rows = users.map(function (u) {
+        return '<tr>' +
+          '<td class="l">' + esc(u.username) + (u.username === currentUser.username ? ' (我)' : '') + '</td>' +
+          '<td>' + esc(u.nickname || '') + '</td>' +
+          '<td><select data-role-of="' + esc(u.username) + '">' +
+            '<option value="user"' + (u.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
+            '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>管理员</option>' +
+          '</select></td>' +
+          '<td>' + esc((u.createdAt || '').slice(0, 10)) + '</td>' +
+          '<td>' +
+            '<button class="small" data-action="users-reset-pw" data-username="' + esc(u.username) + '">重置密码</button> ' +
+            (u.username !== currentUser.username
+              ? '<button class="danger small" data-action="users-del" data-username="' + esc(u.username) + '">删除</button>' : '') +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      v.innerHTML =
+        '<h2 class="sec-title">用户管理(管理员)</h2>' +
+        '<p style="color:#888;font-size:12px">可新增用户、修改角色、重置密码或删除;不能删除自己,且系统至少保留一名管理员。</p>' +
+        '<div class="list-actions">' +
+          '<input id="new-user-name" type="text" placeholder="用户名">' +
+          '<input id="new-user-nick" type="text" placeholder="昵称(可选)">' +
+          '<input id="new-user-pw" type="password" placeholder="初始密码(≥6位)">' +
+          '<select id="new-user-role"><option value="user">普通用户</option><option value="admin">管理员</option></select>' +
+          '<button class="primary" data-action="users-add">新增用户</button>' +
+        '</div>' +
+        '<table class="grid"><thead><tr><th class="l">用户名</th><th>昵称</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table>';
+    }).catch(function (err) {
+      toast('加载用户失败:' + err.message);
+      if (err.status === 401 || err.status === 403) handleAuthExpired();
+    });
+  }
+
   // ---------- 启动 ----------
   async function boot() {
-    try {
-      data = await Store.load();
-      // 主界面默认:打开最近一个估算单的 Excel 化表格;无数据则进入估算单列表
-      if (!location.hash) {
-        const latest = data.estimates.length ? data.estimates[data.estimates.length - 1].id : null;
-        location.hash = latest ? '#estimate/' + latest : '#estimates';
-        return; // hashchange 会触发 applyHash
+    // 自动化测试通道:?autologin=1 直接以内置 admin 登录(仅测试/演示用)
+    if (!Store.token && /[?&]autologin=1/.test(location.search)) {
+      try { currentUser = await Store.login('admin', 'admin123'); }
+      catch (err) { /* 继续走正常登录页 */ }
+    }
+    if (!currentUser && Store.token) {
+      try { currentUser = await Store.me(); }
+      catch (err) {
+        if (err.status === 401) Store.token = '';
       }
-      applyHash();
-    } catch (err) {
-      const be = $('#boot-error');
-      be.hidden = false;
-      be.innerHTML = '<h2>无法连接本地服务</h2>' +
-        '<p>' + esc(err.message) + '</p>' +
-        '<p>请先启动服务:双击 <b>启动.bat</b>(或在命令行执行 <code>node server.js</code>),' +
-        '然后用浏览器打开 <code>http://127.0.0.1:8237</code>。</p>';
+    }
+    if (currentUser) {
+      try { await afterAuth(); }
+      catch (err) {
+        if (err.status === 401) { handleAuthExpired(); return; }
+        const be = $('#boot-error');
+        be.hidden = false;
+        be.innerHTML = '<h2>无法连接本地服务</h2>' +
+          '<p>' + esc(err.message) + '</p>' +
+          '<p>请先启动服务:双击 <b>启动.bat</b>(或在命令行执行 <code>node server.js</code>)。</p>';
+      }
+    } else {
+      showAuth('login');
     }
   }
   boot();

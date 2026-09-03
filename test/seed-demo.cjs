@@ -1,6 +1,6 @@
 /**
  * 演示数据种子脚本:重置数据为"11 种材料 + 1 个产品 + 2 个估算单"。
- * 运行:node test/seed-demo.cjs
+ * 运行:node test/seed-demo.cjs(需服务在跑;会先用内置 admin 登录)
  */
 'use strict';
 
@@ -81,9 +81,17 @@ data.estimates.push(makeEstimate('e2', '李四', 12, 10, '2026-10-01', '2026-10-
 data.seq.estimate = 2;
 
 async function main() {
+  // 先以内置 admin 登录获取 token
+  const login = await fetch('http://127.0.0.1:8237/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  if (!login.ok) throw new Error('admin 登录失败: ' + login.status);
+  const token = (await login.json()).token;
   const r = await fetch(API, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
     body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error('PUT failed: ' + r.status);

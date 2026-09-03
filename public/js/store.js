@@ -1,28 +1,92 @@
 /**
- * 数据层:与本地服务端 /api/data 交互,提供 CRUD。
- * 所有修改后调用 Store.save() 落盘到 data/data.json。
+ * 数据层:与本地服务端交互,提供 CRUD 与登录/用户管理。
+ * 数据存于服务端 SQLite(data/brick.db);请求统一携带 Bearer token。
  */
 (function (root) {
   'use strict';
+
+  var TOKEN_KEY = 'brick_token';
 
   function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
   var Store = {
     data: null,
 
-    /** 加载数据(首次启动自动由服务端初始化种子材料) */
+    get token() { return root.localStorage.getItem(TOKEN_KEY) || ''; },
+    set token(v) {
+      if (v) root.localStorage.setItem(TOKEN_KEY, v);
+      else root.localStorage.removeItem(TOKEN_KEY);
+    },
+
+    /** 通用请求(自动携带 Authorization) */
+    async req(url, opts) {
+      opts = opts || {};
+      var headers = Object.assign({}, opts.headers || {});
+      if (opts.json !== undefined) headers['Content-Type'] = 'application/json';
+      var t = this.token;
+      if (t) headers.Authorization = 'Bearer ' + t;
+      var r = await fetch(url, {
+        method: opts.method || (opts.json !== undefined || opts.body ? 'POST' : 'GET'),
+        headers: headers,
+        body: opts.body !== undefined ? opts.body : (opts.json !== undefined ? JSON.stringify(opts.json) : undefined)
+      });
+      var data = null;
+      try { data = await r.json(); } catch (e) { /* 非 JSON */ }
+      if (!r.ok) {
+        var err = new Error((data && data.error) || ('HTTP ' + r.status));
+        err.status = r.status;
+        throw err;
+      }
+      return data;
+    },
+
+    async login(username, password) {
+      var d = await this.req('/api/auth/login', { json: { username: username, password: password } });
+      this.token = d.token;
+      return d.user;
+    },
+    async register(username, password, nickname) {
+      var d = await this.req('/api/auth/register', { json: { username: username, password: password, nickname: nickname || '' } });
+      return d.user;
+    },
+    async me() {
+      var d = await this.req('/api/auth/me', { method: 'GET' });
+      return d.user;
+    },
+    async logout() {
+      try { await this.req('/api/auth/logout', { json: {} }); } catch (e) { /* ignore */ }
+      this.token = '';
+    },
+    async changePassword(oldPassword, newPassword) {
+      return this.req('/api/auth/password', { method: 'PUT', json: { oldPassword: oldPassword, newPassword: newPassword } });
+    },
+    async listUsers() {
+      var d = await this.req('/api/users', { method: 'GET' });
+      return d.users;
+    },
+    async addUser(username, password, nickname, role) {
+      return this.req('/api/users', { json: { username: username, password: password, nickname: nickname || '', role: role || 'user' } });
+    },
+    async updateUser(username, patch) {
+      return this.req('/api/users/' + encodeURIComponent(username), { method: 'PUT', json: patch });
+    },
+    async deleteUser(username) {
+      return this.req('/api/users/' + encodeURIComponent(username), { method: 'DELETE' });
+    },
+
+    /** 加载数据(需登录) */
     async load() {
-      var r = await fetch('/api/data');
+      var r = await fetch('/api/data', { headers: this.token ? { Authorization: 'Bearer ' + this.token } : {} });
       if (!r.ok) throw new Error('加载数据失败:HTTP ' + r.status);
       this.data = await r.json();
       return this.data;
     },
 
-    /** 保存整个数据对象到磁盘 */
+    /** 保存整个数据对象(需登录) */
     async save() {
       var r = await fetch('/api/data', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: Object.assign({ 'Content-Type': 'application/json' }, this.token ? { Authorization: 'Bearer ' + this.token } : {}),
         body: JSON.stringify(this.data)
       });
       if (!r.ok) throw new Error('保存失败:HTTP ' + r.status);

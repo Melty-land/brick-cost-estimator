@@ -14,6 +14,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const zlib = require('zlib');
 const { DatabaseSync } = require('node:sqlite');
 
@@ -221,6 +222,59 @@ function ensureSeed() {
   if (db.prepare('SELECT COUNT(*) AS c FROM materials').get().c === 0) seedMaterials();
 }
 
+// ================= 登录 / 用户(users & sessions 表) =================
+const TOKEN_TTL = 7 * 24 * 3600 * 1000;
+
+function hashPw(pw, salt) { return crypto.scryptSync(String(pw), salt, 32).toString('hex'); }
+function saltHex() { return crypto.randomBytes(16).toString('hex'); }
+function userPublic(u) {
+  return { username: u.username, nickname: u.nickname, role: u.role, status: u.status || 'active', createdAt: u.created_at };
+}
+function ensureAdmin() {
+  const c = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+  if (c === 0) {
+    const salt = saltHex();
+    db.prepare('INSERT INTO users(username,nickname,role,salt,hash,created_at) VALUES(?,?,?,?,?,?)')
+      .run('admin', '管理员', 'admin', salt, hashPw('admin123', salt), new Date().toISOString());
+    console.log('已创建默认账号 admin / admin123(请尽快登录后修改密码)');
+  }
+}
+function cleanupSessions() {
+  db.prepare('DELETE FROM sessions WHERE exp < ?').run(Date.now());
+}
+function createSession(username) {
+  cleanupSessions();
+  const token = crypto.randomBytes(24).toString('hex');
+  db.prepare('INSERT INTO sessions(token,username,exp) VALUES(?,?,?)').run(token, username, Date.now() + TOKEN_TTL);
+  return token;
+}
+function bearerOf(req) {
+  const m = /^Bearer\s+(.+)$/.exec(String(req.headers['authorization'] || ''));
+  return m ? m[1] : null;
+}
+function authUser(req) {
+  const token = bearerOf(req);
+  if (!token) return null;
+  const s = db.prepare('SELECT username,exp FROM sessions WHERE token=?').get(token);
+  if (!s || s.exp < Date.now()) {
+    if (s) db.prepare('DELETE FROM sessions WHERE token=?').run(token);
+    return null;
+  }
+  const u = db.prepare('SELECT * FROM users WHERE username=?').get(s.username);
+  return u ? userPublic(u) : null;
+}
+function requireAuth(req, res) {
+  const u = authUser(req);
+  if (!u) { sendJson(res, 401, { ok: false, error: '未登录或会话已过期' }); return null; }
+  return u;
+}
+function requireAdmin(req, res) {
+  const u = requireAuth(req, res);
+  if (!u) return null;
+  if (u.role !== 'admin') { sendJson(res, 403, { ok: false, error: '仅管理员可执行此操作' }); return null; }
+  return u;
+}
+
 // ================= ZIP(最小实现:store + deflate) =================
 function crc32(buf) {
   let table = crc32.table;
@@ -361,6 +415,10 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+async function parseJsonBody(req) {
+  const buf = await readBody(req);
+  try { return JSON.parse(buf.toString('utf8') || '{}'); } catch (e) { throw new Error('请求体不是合法 JSON'); }
+}
 function serveStatic(req, res, urlPath) {
   let p;
   try { p = decodeURIComponent(urlPath); } catch (e) { p = urlPath; }
@@ -387,13 +445,131 @@ const server = http.createServer(async function (req, res) {
   const url = new URL(req.url, 'http://' + (req.headers.host || '127.0.0.1'));
   const p = url.pathname;
   try {
-    // ---- 数据 API(与前端 Store 兼容) ----
+    // ---- 认证:注册 / 登录 / 会话 ----
+    if (p === '/api/auth/register' && req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      const username = String(body.username || '').trim();
+      const password = String(body.password || '');
+      if (!username) { sendJson(res, 400, { ok: false, error: '用户名不能为空' }); return; }
+      if (password.length < 6) { sendJson(res, 400, { ok: false, error: '密码至少 6 位' }); return; }
+      const exist = db.prepare('SELECT COUNT(*) AS c FROM users WHERE username=?').get(username).c;
+      if (exist) { sendJson(res, 409, { ok: false, error: '用户名已存在' }); return; }
+      // 开放注册·首个为管理员:当仅剩内置 admin 时,第一个注册账号成为管理员
+      const otherCount = db.prepare('SELECT COUNT(*) AS c FROM users WHERE username<>?').get('admin').c;
+      const role = otherCount === 0 ? 'admin' : 'user';
+      const salt = saltHex();
+      db.prepare('INSERT INTO users(username,nickname,role,salt,hash,created_at) VALUES(?,?,?,?,?,?)')
+        .run(username, String(body.nickname || username).slice(0, 30), role, salt, hashPw(password, salt), new Date().toISOString());
+      sendJson(res, 200, { ok: true, user: userPublic(db.prepare('SELECT * FROM users WHERE username=?').get(username)) });
+      return;
+    }
+    if (p === '/api/auth/login' && req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      const username = String(body.username || '').trim();
+      const u = db.prepare('SELECT * FROM users WHERE username=?').get(username);
+      if (!u || u.hash !== hashPw(body.password || '', u.salt)) {
+        sendJson(res, 401, { ok: false, error: '用户名或密码错误' });
+        return;
+      }
+      if (u.status && u.status === 'disabled') { sendJson(res, 403, { ok: false, error: '账号已停用' }); return; }
+      const token = createSession(u.username);
+      sendJson(res, 200, { ok: true, token: token, user: userPublic(u) });
+      return;
+    }
+    if (p === '/api/auth/me' && req.method === 'GET') {
+      const u = requireAuth(req, res);
+      if (u) sendJson(res, 200, { ok: true, user: u });
+      return;
+    }
+    if (p === '/api/auth/logout' && req.method === 'POST') {
+      const token = bearerOf(req);
+      if (token) db.prepare('DELETE FROM sessions WHERE token=?').run(token);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+    if (p === '/api/auth/password' && req.method === 'PUT') {
+      const u = requireAuth(req, res);
+      if (!u) return;
+      const body = await parseJsonBody(req);
+      const rec = db.prepare('SELECT * FROM users WHERE username=?').get(u.username);
+      if (!rec || rec.hash !== hashPw(body.oldPassword || '', rec.salt)) {
+        sendJson(res, 400, { ok: false, error: '旧密码错误' });
+        return;
+      }
+      if (String(body.newPassword || '').length < 6) { sendJson(res, 400, { ok: false, error: '新密码至少 6 位' }); return; }
+      const salt = saltHex();
+      db.prepare('UPDATE users SET salt=?,hash=? WHERE username=?').run(salt, hashPw(body.newPassword, salt), u.username);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // ---- 用户管理(admin) ----
+    if (p === '/api/users' || /^\/api\/users\/[^/]+$/.test(p)) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const m = /^\/api\/users\/([^/]+)$/.exec(p);
+      const name = m ? decodeURIComponent(m[1]) : null;
+      if (p === '/api/users' && req.method === 'GET') {
+        const users = db.prepare('SELECT username,nickname,role,created_at FROM users ORDER BY created_at').all().map(userPublic);
+        sendJson(res, 200, { ok: true, users: users });
+        return;
+      }
+      if (p === '/api/users' && req.method === 'POST') {
+        const body = await parseJsonBody(req);
+        const username = String(body.username || '').trim();
+        if (!username) { sendJson(res, 400, { ok: false, error: '用户名不能为空' }); return; }
+        if (db.prepare('SELECT COUNT(*) AS c FROM users WHERE username=?').get(username).c) {
+          sendJson(res, 409, { ok: false, error: '用户名已存在' }); return;
+        }
+        if (!body.password || String(body.password).length < 6) { sendJson(res, 400, { ok: false, error: '密码至少 6 位' }); return; }
+        const salt = saltHex();
+        db.prepare('INSERT INTO users(username,nickname,role,salt,hash,created_at) VALUES(?,?,?,?,?,?)')
+          .run(username, String(body.nickname || username).slice(0, 30), body.role === 'admin' ? 'admin' : 'user', salt, hashPw(body.password, salt), new Date().toISOString());
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (m && req.method === 'PUT') {
+        const body = await parseJsonBody(req);
+        const rec = db.prepare('SELECT * FROM users WHERE username=?').get(name);
+        if (!rec) { sendJson(res, 404, { ok: false, error: '用户不存在' }); return; }
+        if (name === admin.username && body.role === 'user') { sendJson(res, 400, { ok: false, error: '不能把自己降为普通用户' }); return; }
+        const nickname = body.nickname !== undefined ? String(body.nickname || name).slice(0, 30) : rec.nickname;
+        const role = (body.role === 'admin' || body.role === 'user') ? body.role : rec.role;
+        const status = (body.status === 'active' || body.status === 'disabled') ? body.status : (rec.status || 'active');
+        if (body.password && String(body.password).length >= 6) {
+          const salt = saltHex();
+          db.prepare('UPDATE users SET nickname=?,role=?,status=?,salt=?,hash=? WHERE username=?')
+            .run(nickname, role, status, salt, hashPw(body.password, salt), name);
+        } else {
+          db.prepare('UPDATE users SET nickname=?,role=?,status=? WHERE username=?').run(nickname, role, status, name);
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (m && req.method === 'DELETE') {
+        const rec = db.prepare('SELECT * FROM users WHERE username=?').get(name);
+        if (!rec) { sendJson(res, 404, { ok: false, error: '用户不存在' }); return; }
+        if (name === admin.username) { sendJson(res, 400, { ok: false, error: '不能删除自己' }); return; }
+        if (rec.role === 'admin') {
+          const adminCount = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role='admin'").get().c;
+          if (adminCount <= 1) { sendJson(res, 400, { ok: false, error: '至少保留一名管理员' }); return; }
+        }
+        db.prepare('DELETE FROM users WHERE username=?').run(name);
+        db.prepare('DELETE FROM sessions WHERE username=?').run(name);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+    }
+
+    // ---- 数据 API(与前端 Store 兼容;全站需登录) ----
     if (p === '/api/data') {
       if (req.method === 'GET') {
+        if (!requireAuth(req, res)) return;
         sendJson(res, 200, assembleBlob());
         return;
       }
       if (req.method === 'PUT') {
+        if (!requireAuth(req, res)) return;
         const raw = await readBody(req);
         let blob;
         try { blob = JSON.parse(raw.toString('utf8')); } catch (e) { sendJson(res, 400, { ok: false, error: '数据结构不合法' }); return; }
@@ -407,6 +583,7 @@ const server = http.createServer(async function (req, res) {
       }
     }
     if (p === '/api/reset' && req.method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       db.exec('PRAGMA foreign_keys=OFF;');
       db.exec('BEGIN IMMEDIATE;');
       try {
@@ -420,14 +597,16 @@ const server = http.createServer(async function (req, res) {
       return;
     }
 
-    // ---- 备份:在线快照(B3) ----
+    // ---- 备份:在线快照(B3;需登录) ----
     if (p === '/api/db/backup' && req.method === 'POST') {
+      if (!requireAuth(req, res)) return;
       const file = takeSnapshot();
       sendJson(res, 200, { ok: true, file: path.basename(file) });
       return;
     }
-    // ---- 备份:导出 zip(B2) ----
+    // ---- 备份:导出 zip(B2;需登录) ----
     if (p === '/api/db/export' && req.method === 'POST') {
+      if (!requireAuth(req, res)) return;
       const zip = buildZip([
         { name: 'brick-data.json', data: Buffer.from(JSON.stringify(assembleBlob(), null, 2), 'utf8') },
         { name: 'brick-meta.json', data: Buffer.from(JSON.stringify({ app: 'brick-cost', version: 2, exportedAt: new Date().toISOString() }, null, 2), 'utf8') }
@@ -440,8 +619,9 @@ const server = http.createServer(async function (req, res) {
       res.end(zip);
       return;
     }
-    // ---- 备份:导入(B2,zip 或原始 JSON 回灌;导入前自动快照) ----
+    // ---- 备份:导入(B2,需 admin;导入前自动快照) ----
     if (p === '/api/db/import' && req.method === 'POST') {
+      if (!requireAdmin(req, res)) return;
       const raw = await readBody(req);
       let blob = null;
       if (raw.length > 2 && raw[0] === 0x50 && raw[1] === 0x4b) {
@@ -470,6 +650,7 @@ const server = http.createServer(async function (req, res) {
 openDb();
 migrateLegacy();
 ensureSeed();
+ensureAdmin();
 server.listen(PORT, function () {
   console.log('==============================================');
   console.log('  砖成本材料预算 · 成本估算系统(SQLite 版)');

@@ -16,7 +16,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function main() {
   const child = spawn(EDGE, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-extensions', '--no-first-run',
-    `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${PROFILE}`, APP + '#estimate/e1'
+    `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${PROFILE}`, APP + '?autologin=1#estimate/e1'
   ], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -173,7 +173,7 @@ async function main() {
   console.log('\n✅ 全部主流程测试通过');
   ws.close();
   child.kill();
-  process.exit(0);
+  setTimeout(() => process.exit(0), 100);
 }
 
 main().catch((e) => { console.error('测试失败:', e); process.exit(1); });

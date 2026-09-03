@@ -17,7 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function main() {
   const child = spawn(EDGE, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-extensions', '--no-first-run',
-    `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${PROFILE}`, APP
+    `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${PROFILE}`, APP + '?autologin=1'
   ], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -183,7 +183,8 @@ async function main() {
     return v && !v.hidden && document.querySelectorAll('#view-estimates tbody tr').length >= 2;
   })()`);
   if (!saved) { console.error('✗ 保存后未回到列表'); process.exit(1); }
-  const api = await (await fetch(APP + 'api/data')).json();
+  const tk = await evalJS(`localStorage.getItem('brick_token') || ''`);
+  const api = await (await fetch(APP + 'api/data', { headers: tk ? { Authorization: 'Bearer ' + tk } : {} })).json();
   const e1 = api.estimates.find((e) => e.id === 'e1');
   if (!e1 || e1.rows[0].price !== 500 || e1.status !== 'ready' ||
       (e1.formulas && (Object.keys(e1.formulas.f || {}).length || Object.keys(e1.formulas.v || {}).length))) {
@@ -194,7 +195,7 @@ async function main() {
   console.log('\n✅ 全部网格编辑器测试通过(页面异常:' + (pageErrors.length ? pageErrors : '无') + ')');
   ws.close();
   child.kill();
-  process.exit(0);
+  setTimeout(() => process.exit(0), 100);
 }
 
 main().catch((e) => { console.error('测试失败:', e); process.exit(1); });

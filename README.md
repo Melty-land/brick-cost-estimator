@@ -21,7 +21,9 @@ cd D:\deepseek-harness\陆创\成本估算系统
 node server.js
 ```
 
-然后用浏览器访问 <http://127.0.0.1:8237>。
+然后用浏览器访问 <http://127.0.0.1:8237>,**登录后使用**。
+
+**登录账号**:默认 **admin / admin123**(首次登录后请在「用户管理」中尽快改密);登录页可「注册」新账号,**除内置 admin 外的第一个注册账号自动成为管理员**,其后注册的为普通用户。
 
 **换端口**(默认 8237,被占用时):
 
@@ -33,6 +35,7 @@ node server.js
 
 ## 功能一览
 
+- **登录 / 注册 / 用户管理**:全站需登录;开放注册(首个注册自动为管理员);admin 可管理用户(新增/改角色/重置密码/删除);
 - **材料管理 / 产品配方 / 估算单 / 图表预览 / 历史对比** 五个标签页;
 - **Excel 化表格编辑器**:单元格可编辑、公式栏支持 `=引用/SUM/IF/ROUND…` 自定义公式、自动重算、错误与循环检测;
 - **单位与规格**:全表数量按**公斤**直乘不换算;表格含**砖长/宽/高**规格行,自动计算砖面积/体积,并自动派生每平方/立方重量、每托重量、计划数与成品率;
@@ -54,10 +57,13 @@ node test/calc.test.cjs        # 计算单元测试
 node test/formula.test.cjs     # 公式引擎单元测试
 node test/sheet.test.cjs       # 表格默认公式一致性
 node test/seed-demo.cjs        # 重置演示数据
+node test/auth-api-check.cjs   # 服务端鉴权冒烟(注册/登录/越权)
+node test/db-backup-check.cjs  # 备份导出/导入验证
 node test/cdp-test.cjs         # 浏览器主流程
 node test/cdp-grid-test.cjs    # 浏览器表格编辑器
 node test/cdp-rules-test.cjs   # 必填/草稿/退出弹窗/相邻校验
 node test/cdp-crud-test.cjs    # 浏览器 CRUD
 node test/cdp-charts-test.cjs  # 浏览器图表
+node test/cdp-auth-test.cjs    # 浏览器登录/注册/用户管理
 node test/cdp-fix-check.cjs    # 滚动/零异常/图标验证
 ```

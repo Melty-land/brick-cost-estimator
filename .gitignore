@@ -13,3 +13,4 @@ data/tokens.json
 README-restart.md
 restart-server.ps1
 server.pid
+data/data.json

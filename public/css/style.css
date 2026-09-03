@@ -38,6 +38,25 @@ body {
 
 main { max-width: 1280px; margin: 16px auto; padding: 0 16px; }
 
+/* ---- 用户栏 ---- */
+.user-area { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+#user-badge { color: #cfe0f5; font-size: 13px; }
+#btn-logout { background: transparent; border: 1px solid rgba(255,255,255,.5); color: #fff; padding: 2px 12px; }
+
+/* ---- 登录/注册覆盖层 ---- */
+#auth-screen { position: fixed; inset: 0; z-index: 500; background: linear-gradient(160deg, #1f2d3d 0%, #31445c 100%);
+  display: flex; align-items: center; justify-content: center; }
+.auth-card { background: #fff; border-radius: 10px; padding: 26px 30px; width: 380px; max-width: 92%;
+  box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.auth-card h2 { margin: 0 0 6px; font-size: 19px; text-align: center; }
+.auth-sub { color: #777; font-size: 12.5px; text-align: center; margin: 0 0 14px; }
+.auth-card form label { display: block; font-size: 13px; color: #444; margin-bottom: 10px; }
+.auth-card form input { width: 100%; padding: 8px 10px; font-size: 14px; box-sizing: border-box; }
+.auth-submit { width: 100%; padding: 9px; font-size: 15px; margin-top: 4px; }
+.auth-msg { min-height: 18px; font-size: 13px; color: #b00020; margin: 2px 0; }
+.auth-switch { text-align: center; font-size: 13px; color: #555; margin-top: 12px; }
+.auth-note { text-align: center; color: #999; font-size: 12px; margin-top: 6px; }
+
 .view { background: #fff; border: 1px solid #dfe3e8; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
 
 /* ---- 通用 ---- */
