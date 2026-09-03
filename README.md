@@ -17,7 +17,7 @@
 **方式二(命令行)**
 
 ```
-cd D:\deepseek-harness\陆创\成本估算系统
+cd <程序所在目录>      # 进入本系统所在文件夹(本 README 所在目录)
 node server.js
 ```
 

@@ -11,7 +11,8 @@ const { spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const EDGE = require('./find-edge.cjs');
+if (!EDGE) { console.error('✗ 未找到 Microsoft Edge(可设环境变量 EDGE_PATH 指定路径)'); process.exit(1); }
 const CDP_PORT = 9290;
 const PROFILE = path.join(os.tmpdir(), 'dsh-cdp-' + CDP_PORT);
 const DL_DIR = path.join(os.tmpdir(), 'dsh-dl-' + CDP_PORT);
