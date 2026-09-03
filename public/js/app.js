@@ -1553,7 +1553,7 @@
     $('#auth-screen').style.display = 'flex';
     $('#auth-submit').textContent = authMode === 'login' ? '登 录' : '注 册';
     $('#auth-sub').textContent = authMode === 'login'
-      ? '请登录后使用(默认账号 admin / admin123)'
+      ? '请登录后使用'
       : '创建账号;除内置 admin 外的首个注册账号自动成为管理员';
     $('#auth-nickname-wrap').hidden = authMode !== 'register';
     $('#auth-msg').textContent = '';
