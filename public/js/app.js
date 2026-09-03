@@ -15,6 +15,9 @@
   const compareSel = new Set();    // 对比勾选的估算单 id
   let chartEstId = null;           // 图表页环形图选中的估算单 id
   let chartMatMode = 'amount';     // 图表页材料汇总模式: 'amount' 金额 / 'kg' 用量(公斤)
+  let lastChartsSig = null;        // 上次渲染的图表数据指纹(懒加载缓存)
+  let lastChartId = null;          // 上次渲染时选中的估算单
+  let lastMatMode = null;          // 上次渲染时的汇总模式
   let estDateFrom = '';            // 估算单列表日期筛选:开始日期(YYYY-MM-DD,空=不限)
   let estDateTo = '';              // 估算单列表日期筛选:结束日期(空=不限)
   // ---- 表格编辑器(Excel 化)状态 ----
@@ -59,6 +62,7 @@
     'back': '<path d="M15 5l-7 7 7 7"/>',
     'view': '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     'download': '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
+    'printer': '<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6v-7z"/>',
     'upload': '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
     'camera': '<path d="M4 7h3l2-2h6l2 2h3v12H4V7z"/><circle cx="12" cy="13" r="3.5"/>',
     'inbox': '<path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6zM3 13h5l2 2h4l2-2h5"/>',
@@ -417,6 +421,8 @@
     lastEditorHash = location.hash || ('#estimate/' + (estDraft.id || ''));
     switchView('editor');
     renderEstimateEditor();
+    // P2 自动草稿:若本机有同单未保存草稿(刷新/崩溃残留),自动恢复
+    tryRestoreAutoDraft();
   }
 
 
@@ -443,6 +449,9 @@
         '<button data-action="editor-save-draft">' + btnIcon('folder', '存为草稿') + '</button>' +
         '<button class="primary" data-action="editor-save">' + btnIcon('check', '保存为可用表格(需填完必填)') + '</button>' +
         '<button data-action="editor-save-copy">' + btnIcon('copy', '保存为副本') + '</button>' +
+        '<span class="toolbar-sep" aria-hidden="true"></span>' +
+        '<button data-action="editor-export-xls" title="导出为 Excel(.xls),可自选保存路径">' + btnIcon('download', '导出 Excel') + '</button>' +
+        '<button data-action="editor-export-pdf" title="打印/另存为 PDF,可自选保存路径">' + btnIcon('printer', '导出 PDF') + '</button>' +
       '</div>' +
       '<div class="fxbar">' +
         '<span class="fx-name" id="fx-name">—</span>' +
@@ -625,7 +634,7 @@
     const text = inputEl.value;
     const t = String(text).trim();
     if (t === fxContent(def)) return; // 未改动(含首尾空白),跳过
-    gridDirty = true;
+    markDirty();
     if (t.charAt(0) === '=') {
       try { Formula.parse(t.slice(1)); } catch (e) { /* 允许保存;格子显示 #PARSE! */ }
       delete gridOverV[gridSel];
@@ -649,6 +658,73 @@
     if (msg) toast(msg);
   }
 
+  // ================= 本地自动草稿(P2:防刷新/误关丢失编辑) =================
+  const AUTO_KEY = 'brick_autosave_v1';
+  let autoTimer = null;
+  /** 标记编辑器有改动:置 dirty 并防抖 600ms 写入 localStorage */
+  function markDirty() {
+    gridDirty = true;
+    scheduleAutoSave();
+  }
+  /** 保存成功/明确放弃后:清除本地草稿并复位 dirty */
+  function markClean() {
+    clearTimeout(autoTimer);
+    autoTimer = null;
+    try { localStorage.removeItem(AUTO_KEY); } catch (e) { /* 忽略 */ }
+    gridDirty = false;
+  }
+  /** 保存成功后的轻量清理:清除已落库草稿;若保存期间又产生新改动(有排队存档)则保留 */
+  function savedAutoDraft() {
+    try { localStorage.removeItem(AUTO_KEY); } catch (e) { /* 忽略 */ }
+    gridDirty = false;
+  }
+  /** 防抖存档(仅编辑器打开且有草稿时) */
+  function scheduleAutoSave() {
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(function () {
+      autoTimer = null;
+      if (!estDraft) return;
+      try {
+        const payload = {
+          savedAt: Date.now(),
+          id: estDraft.id || null,          // 已保存单的 id;新单为 null
+          isNew: !estDraft.id,
+          name: estDraft.name || '',
+          draft: JSON.parse(JSON.stringify(estDraft)),
+          overF: JSON.parse(JSON.stringify(gridOverF || {})),
+          overV: JSON.parse(JSON.stringify(gridOverV || {}))
+        };
+        localStorage.setItem(AUTO_KEY, JSON.stringify(payload));
+      } catch (e) { /* 存储满/隐私模式忽略 */ }
+    }, 600);
+  }
+  /** 打开估算单时尝试恢复上次未保存草稿(同 id 或同为新建且名称匹配才应用) */
+  function tryRestoreAutoDraft() {
+    let raw = null;
+    try { raw = localStorage.getItem(AUTO_KEY); } catch (e) { return; }
+    if (!raw) return;
+    let p;
+    try { p = JSON.parse(raw); } catch (e) { return; }
+    if (!p || !p.draft) return;
+    const sameId = !!(estDraft.id && p.id === estDraft.id);
+    // 新单恢复需谨慎:草稿必须"改过名"(有实质标识),避免把上一张无名新单草稿套到当前空新单上
+    const sameNew = !estDraft.id && p.isNew && !!p.name && p.name === (estDraft.name || '');
+    if (!sameId && !sameNew) return; // 不是同一张单,不套用
+    const stale = Date.now() - (p.savedAt || 0) > 7 * 24 * 3600 * 1000;
+    if (stale) return; // 一周前的旧草稿不打扰
+    // 套用草稿
+    estDraft = p.draft;
+    gridOverF = p.overF || {};
+    gridOverV = p.overV || {};
+    gridSel = null;
+    gridCache = null;
+    gridDirty = true;
+    // 清除已套用的本地草稿,避免下次重复弹
+    try { localStorage.removeItem(AUTO_KEY); } catch (e) { /* 忽略 */ }
+    renderEstimateEditor();
+    toast('已恢复上次未保存的编辑内容(' + new Date(p.savedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) + ' 保存的草稿)');
+  }
+
   /** 导入已有产品配方:替换当前材料行并按配方填每锅用量 */
   function applyProductPick(productId) {
     const p = productId ? data.products.find(function (x) { return x.id === productId; }) : null;
@@ -666,7 +742,7 @@
       estDraft.productId = p.id;
       estDraft.name = p.name;
       // 预算表编号独立于产品编号,不再随配方自动带入(由用户手动填写)
-      gridDirty = true;
+      markDirty();
       clearGridOverrides('已按产品配方导入材料行,公式覆盖已清空');
       renderEstimateEditor();
       toast('已导入产品配方:' + p.name + '(' + rows.length + ' 个材料)');
@@ -791,10 +867,13 @@
     function commit() {
       savingEstimate = true;
       setSaveBtnLoading(true);
+      // 取消"保存前改动"的排队存档(即将落库,无需再存本地草稿)
+      clearTimeout(autoTimer);
+      autoTimer = null;
       if (asCopy || !d.id) { Store.addEstimate(d); estDraft = d; }
       else { Store.updateEstimate(d.id, d); estDraft.status = status; }
       Store.save().then(function () {
-        gridDirty = false;
+        savedAutoDraft();
         toast((status === 'ready' ? '已保存为可用表格' : '已保存为草稿') + (asCopy ? '(副本)' : ''));
         if (after) location.hash = after;
         else location.hash = '#estimates';
@@ -822,6 +901,28 @@
     else { btn.disabled = false; if (btn.dataset.origHtml) { btn.innerHTML = btn.dataset.origHtml; delete btn.dataset.origHtml; } }
   }
 
+  /** 导出当前编辑器中的预算表(Excel .xls / PDF 打印)。文件名取名称规格+预算表编号 */
+  function exportCurrentSheet(kind) {
+    if (!estDraft) return;
+    // 先把公式栏未回车内容提交,确保导出的是所见即所得
+    if (document.getElementById('fx-input') && !document.getElementById('fx-input').disabled) commitFx();
+    const tableEl = document.querySelector('#view-editor .sheet-scroll table');
+    if (!tableEl) { toast('当前无预算表可导出'); return; }
+    const safeName = String(estDraft.name || '预算表').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+    const code = String(estDraft.code || '').replace(/[\\/:*?"<>|]/g, '_');
+    const base = (safeName + (code ? '_' + code : '')) || '预算表';
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (kind === 'pdf') {
+      // 打印对话框可"另存为 PDF"并自选路径;用 sheet-scroll 容器作为打印区域
+      toast('请在打印对话框中选择「另存为 PDF」并指定保存位置');
+      Exporter.printSheet(document.querySelector('#view-editor .sheet-scroll'));
+      return;
+    }
+    Exporter.exportXLS(base + '_' + stamp + '.xls', tableEl, safeName)
+      .then(function (ok) { if (ok !== false) toast('已导出 Excel:' + base + '.xls'); })
+      .catch(function () { toast('导出失败'); });
+  }
+
   // ---------- 退出编辑器三选弹窗 ----------
   function requestLeave(hashTarget) {
     const editorEl = document.getElementById('view-editor');
@@ -842,8 +943,8 @@
     estDraft = null;
     gridSel = null;
     gridCache = null;
-    gridDirty = false;
     gridPendingNav = null;
+    markClean(); // 离开编辑器(discard 等)清本地草稿与 dirty
     location.hash = hashTarget;
   }
   function exitChoice(kind) {
@@ -926,13 +1027,24 @@
       '<div class="list-actions">' + checkboxes + '</div>' + table;
   }
 
-  // ---------- 图表预览 ----------
+  // ---------- 图表预览(懒加载:数据与选择未变时复用已渲染 DOM,不重复重算) ----------
+  function chartsSig() {
+    return data.estimates.map(function (e) {
+      return e.id + '|' + e.name + '|' + e.startDate + '|' + e.status + '|' + (e.rows ? e.rows.length : 0) + '|' + (e.calc ? e.calc.costTotal1 : '');
+    }).join('~');
+  }
   function renderCharts() {
     const v = $('#view-charts');
+    // 懒加载:数据、选中批次与汇总模式均未变 → 直接复用当前 DOM(图表计算昂贵,避免每次切页重算)
+    const sig = chartsSig();
+    if (v && !v.hidden && v.innerHTML && lastChartsSig === sig && lastChartId === chartEstId && lastMatMode === chartMatMode) {
+      return;
+    }
     const estimates = data.estimates.slice().reverse(); // 新→旧
     if (!estimates.length) {
       v.innerHTML = '<h2 class="sec-title">图表预览</h2>' +
         '<p class="empty-hint">暂无估算单。请先在"估算单"页创建估算单后再查看图表。</p>';
+      lastChartsSig = sig; lastChartId = null; lastMatMode = chartMatMode;
       return;
     }
     // 环形图:选中的批次(默认最新)
@@ -1006,6 +1118,7 @@
           matItemsHTML +
         '</div>' +
       '</div>';
+    lastChartsSig = sig; lastChartId = chartEstId; lastMatMode = chartMatMode;
   }
 
   // ---------- 事件委托 ----------
@@ -1203,6 +1316,12 @@
         saveEstimate(ready ? 'ready' : 'draft', true);
         break;
       }
+      case 'editor-export-xls':
+        exportCurrentSheet('xls');
+        break;
+      case 'editor-export-pdf':
+        exportCurrentSheet('pdf');
+        break;
       case 'editor-add-material': {
         const sel = $('#editor-add-mat');
         if (!sel || !sel.value) { toast('没有可添加的材料'); return; }
@@ -1211,7 +1330,7 @@
           id: uid(), materialId: m.id, name: m.name, zone: m.zone,
           qtyPerPot: '', price: '', stockOnHand: '', stockIn: '', qty: ''
         });
-        gridDirty = true;
+        markDirty();
         clearGridOverrides('材料行结构已变化,已清空公式覆盖');
         renderEstimateEditor();
         break;
@@ -1219,7 +1338,7 @@
       case 'editor-del-mat':
         if (!confirm('确认移除该材料行?')) return;
         estDraft.rows.splice(Number(btn.dataset.idx), 1);
-        gridDirty = true;
+        markDirty();
         clearGridOverrides('材料行结构已变化,已清空公式覆盖');
         renderEstimateEditor();
         break;
@@ -1417,6 +1536,15 @@
   });
 
   window.addEventListener('hashchange', applyHash);
+  // P2:刷新/关闭前若有未保存编辑,提醒(草稿已自动存本机,可恢复)
+  window.addEventListener('beforeunload', function (e) {
+    const editorEl = document.getElementById('view-editor');
+    if (!editorEl || editorEl.hidden || !estDraft) return;
+    if (gridDirty) {
+      e.preventDefault();
+      e.returnValue = ''; // 触发浏览器"离开?"提示(编辑内容已自动存本机草稿)
+    }
+  });
 
   // ---------- 登录 / 注册 / 用户管理 ----------
   let authMode = 'login';
@@ -1472,12 +1600,15 @@
     gridOverV = {};
     gridSel = null;
     gridCache = null;
-    gridDirty = false;
     gridPendingNav = null;
+    markClean(); // 清本地自动草稿与 dirty
     lastEditorHash = null;
     compareSel.clear();
     chartEstId = null;
     chartMatMode = 'amount';
+    lastChartsSig = null;
+    lastChartId = null;
+    lastMatMode = null;
     estDateFrom = '';
     estDateTo = '';
     productFormDraft = null;

@@ -18,3 +18,5 @@ data/*.bak-current
 data/restored-userdata.db*
 data/userdata-restored.json
 data/.userdata-cache.json
+data/.pre-*
+data/.*-regress-*

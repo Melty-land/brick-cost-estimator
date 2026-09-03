@@ -454,3 +454,24 @@ button:not(.primary) .spin { border-color: rgba(0, 0, 0, .25); border-top-color:
 .date-filter input[type="date"] { width: 138px; }
 .date-filter .df-count { margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
 .date-filter .df-count:empty { display: none; }
+
+/* 编辑器工具栏分隔 */
+.toolbar-sep { width: 1px; height: 20px; background: var(--border-strong); margin: 0 4px; }
+
+/* 打印:仅显示预算表区域(导出 PDF 用) */
+@media print {
+  body.printing .app-header,
+  body.printing .toolbar,
+  body.printing .fxbar,
+  body.printing .pick-bar,
+  body.printing .required-bar,
+  body.printing .sheet-hint,
+  body.printing .list-actions,
+  body.printing .chip-bar,
+  body.printing .editor-note,
+  body.printing .view:not(#view-editor) { display: none !important; }
+  body.printing #view-editor { box-shadow: none; border: none; margin: 0; padding: 0; }
+  body.printing .sheet-scroll { overflow: visible !important; border: none; }
+  body.printing .sheet-grid { font-size: 11px; }
+  @page { size: A4 landscape; margin: 8mm; }
+}
