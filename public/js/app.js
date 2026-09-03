@@ -48,6 +48,37 @@
   function today() { return new Date().toISOString().slice(0, 10); }
   function uid() { return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
+  // ---------- 内联 SVG 图标集(零依赖;iOS 线性风格,stroke 当前色) ----------
+  const ICON_PATHS = {
+    'plus': '<path d="M12 5v14M5 12h14"/>',
+    'trash': '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    'edit': '<path d="M4 20h4L19 9l-4-4L4 16v4zM13 6l4 4"/>',
+    'copy': '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+    'back': '<path d="M15 5l-7 7 7 7"/>',
+    'view': '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    'download': '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
+    'upload': '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
+    'camera': '<path d="M4 7h3l2-2h6l2 2h3v12H4V7z"/><circle cx="12" cy="13" r="3.5"/>',
+    'inbox': '<path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6zM3 13h5l2 2h4l2-2h5"/>',
+    'chart': '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    'calc': '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
+    'logout': '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/>',
+    'folder': '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
+    'check': '<path d="M4 12l5 5L20 6"/>',
+    'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5a3.5 3.5 0 0 1 0 7M17 20a6 6 0 0 0-2.2-4.7"/>'
+  };
+  /** 内联 SVG 图标(线性、1.8 描边、currentColor)。name 不存在时返回空。 */
+  function icon(name, size) {
+    const p = ICON_PATHS[name];
+    if (!p) return '';
+    const s = size || 15;
+    return '<svg class="ic" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
+  }
+  /** 按钮文本带图标:icon + 文字(无文本则纯图标) */
+  function btnIcon(name, text) {
+    return icon(name) + (text ? '<span>' + esc(text) + '</span>' : '');
+  }
+
   /** 按路径写入: 'rows.0.qtyPerPot' / 'calc.tonPrice' */
   function setByPath(obj, path, value) {
     const parts = String(path).split('.');
@@ -75,10 +106,11 @@
     toastTimer = setTimeout(function () { el.hidden = true; }, 2200);
   }
 
-  /** 保存并刷新/提示;统一处理失败与登录过期(避免未捕获的 Promise 拒绝) */
-  function saveAndRefresh(okFn) {
+  /** 保存并刷新/提示;统一处理失败与登录过期(避免未捕获的 Promise 拒绝)。errFn 在失败时调用(用于恢复按钮态) */
+  function saveAndRefresh(okFn, errFn) {
     Store.save().then(okFn || function () {}).catch(function (err) {
       toast('保存失败:' + (err && err.message ? err.message : '未知错误'));
+      if (errFn) errFn();
       if (err && (err.status === 401 || err.status === 403)) handleAuthExpired();
     });
   }
@@ -145,7 +177,7 @@
           '<option value="底料"' + (m.zone === '底料' ? ' selected' : '') + '>底料</option>' +
           '<option value="面料"' + (m.zone === '面料' ? ' selected' : '') + '>面料</option>' +
         '</select></td>' +
-        '<td><button class="danger small" data-action="del-material" data-id="' + m.id + '">删除</button></td>' +
+        '<td class="row-actions"><button class="danger small" data-action="del-material" data-id="' + m.id + '">' + btnIcon('trash', '删除') + '</button></td>' +
       '</tr>';
     }).join('');
     v.innerHTML =
@@ -154,10 +186,13 @@
       '<div class="list-actions">' +
         '<input id="new-mat-name" type="text" placeholder="材料名称,如:黑水泥">' +
         '<select id="new-mat-zone"><option value="底料">底料</option><option value="面料">面料</option></select>' +
-        '<button class="primary" data-action="add-material">添加材料</button>' +
+        '<button class="primary" data-action="add-material">' + btnIcon('plus', '添加材料') + '</button>' +
       '</div>' +
       '<table class="grid"><thead><tr><th class="l">材料名称</th><th>所属区</th><th>操作</th></tr></thead>' +
-      '<tbody>' + (rows || '<tr><td colspan="3" class="empty-hint">暂无材料</td></tr>') + '</tbody></table>';
+      '<tbody>' + (rows || '<tr><td colspan="3"><div class="empty-state">' + icon('inbox', 30) +
+        '<div class="empty-title">暂无材料</div>' +
+        '<div class="empty-sub">添加常用原材料(如水泥/砂石/染料),供产品配方与估算单选择。</div>' +
+      '</div></td></tr>') + '</tbody></table>';
   }
 
   // ---------- 产品与配方 ----------
@@ -168,17 +203,23 @@
         '<td class="l">' + esc(p.name) + '</td>' +
         '<td>' + esc(p.code || '—') + '</td>' +
         '<td>' + p.recipe.length + ' 种</td>' +
-        '<td><button class="small" data-action="edit-product" data-id="' + p.id + '">编辑配方</button> ' +
-            '<button class="danger small" data-action="del-product" data-id="' + p.id + '">删除</button></td>' +
+        '<td class="row-actions">' +
+          '<button class="small" data-action="edit-product" data-id="' + p.id + '">' + btnIcon('edit', '编辑配方') + '</button> ' +
+          '<button class="danger small" data-action="del-product" data-id="' + p.id + '">' + btnIcon('trash', '删除') + '</button>' +
+        '</td>' +
       '</tr>';
     }).join('');
     const form = productFormDraft ? renderProductForm() : '';
     v.innerHTML =
       '<h2 class="sec-title">产品与配方</h2>' +
       form +
-      '<div class="list-actions"><button class="primary" data-action="new-product">新建产品</button></div>' +
+      '<div class="list-actions"><button class="primary" data-action="new-product">' + btnIcon('plus', '新建产品') + '</button></div>' +
       '<table class="grid"><thead><tr><th class="l">名称规格</th><th>产品编号</th><th>配方材料数</th><th>操作</th></tr></thead>' +
-      '<tbody>' + (list || '<tr><td colspan="4" class="empty-hint">暂无产品,点击"新建产品"创建</td></tr>') + '</tbody></table>';
+      '<tbody>' + (list || '<tr><td colspan="4"><div class="empty-state">' + icon('inbox', 30) +
+        '<div class="empty-title">暂无产品</div>' +
+        '<div class="empty-sub">先维护好材料,再新建产品并录入每锅配方用量。</div>' +
+        '<button class="primary small" data-action="new-product">' + btnIcon('plus', '新建产品') + '</button>' +
+      '</div></td></tr>') + '</tbody></table>';
   }
 
   function renderProductForm() {
@@ -210,8 +251,8 @@
         '<select id="pf-add-mat">' + (available.map(function (m) {
           return '<option value="' + m.id + '">' + esc(m.name) + '（' + m.zone + '）</option>';
         }).join('') || '<option value="">无可用材料</option>') + '</select>' +
-        '<button class="small" data-action="pf-add-row">添加材料</button>' +
-        '<button class="primary" data-action="save-product">保存产品</button>' +
+        '<button class="small" data-action="pf-add-row">' + btnIcon('plus', '添加材料') + '</button>' +
+        '<button class="primary" data-action="save-product">' + btnIcon('check', '保存产品') + '</button>' +
         '<button data-action="cancel-product">取消</button>' +
       '</div></div>';
   }
@@ -222,7 +263,8 @@
     const prodOpts = data.products.map(function (p) {
       return '<option value="' + p.id + '">' + esc(p.name) + '（' + esc(p.code || '无编号') + '）</option>';
     }).join('');
-    const rows = data.estimates.slice().reverse().map(function (e) {
+    const all = data.estimates.slice().reverse();
+    const rows = all.map(function (e) {
       const c = CostCalc.compute(e);
       const st = e.status === 'ready' ? 'ready' : 'draft';
       return '<tr>' +
@@ -235,25 +277,57 @@
         '<td>' + fmt(e.potBottom, 0) + ' / ' + fmt(e.potTop, 0) + '</td>' +
         '<td class="money">¥' + fmt(c.calc.costTotal1) + '</td>' +
         '<td class="money">¥' + fmt(c.calc.costTotal2) + '</td>' +
-        '<td>' +
-          '<button class="small" data-action="view-estimate" data-id="' + e.id + '">查看/编辑</button> ' +
-          '<button class="small" data-action="clone-estimate" data-id="' + e.id + '">复制</button> ' +
-          '<button class="danger small" data-action="del-estimate" data-id="' + e.id + '">删除</button>' +
+        '<td class="row-actions">' +
+          '<button class="small" data-action="view-estimate" data-id="' + e.id + '" title="打开预算表编辑">' + btnIcon('view', '查看') + '</button> ' +
+          '<button class="small" data-action="clone-estimate" data-id="' + e.id + '" title="复制为新估算单">' + btnIcon('copy', '复制') + '</button> ' +
+          '<button class="danger small row-del" data-action="del-estimate" data-id="' + e.id + '" title="删除该估算单">' + btnIcon('trash', '删除') + '</button>' +
         '</td>' +
       '</tr>';
     }).join('');
+
+    // 顶部统计条(KPI 卡):总批次 / 可用 / 草稿 / 成本总价①合计
+    const nReady = all.filter(function (e) { return e.status === 'ready'; }).length;
+    const nDraft = all.length - nReady;
+    const sumCost = all.reduce(function (s, e) {
+      const c = CostCalc.compute(e);
+      return s + (isFinite(c.calc.costTotal1) ? c.calc.costTotal1 : 0);
+    }, 0);
+    const statCard = function (label, value, cls, ic) {
+      return '<div class="kpi-card' + (cls ? ' ' + cls : '') + '">' +
+        '<span class="kpi-ic">' + icon(ic, 18) + '</span>' +
+        '<div class="kpi-body"><span class="kpi-label">' + label + '</span>' +
+        '<span class="kpi-value">' + value + '</span></div></div>';
+    };
+    const stats = all.length
+      ? '<div class="kpi-row">' +
+          statCard('估算单(批次)', fmt(all.length, 0), '', 'folder') +
+          statCard('可用表格', fmt(nReady, 0), 'kpi-ok', 'check') +
+          statCard('草稿', fmt(nDraft, 0), 'kpi-warn', 'edit') +
+          statCard('成本总价①合计(元)', '¥' + fmt(sumCost, 0), 'kpi-cost', 'chart') +
+        '</div>'
+      : '';
+
+    const empty = !all.length
+      ? '<tr><td colspan="10"><div class="empty-state">' + icon('inbox', 34) +
+          '<div class="empty-title">暂无估算单</div>' +
+          '<div class="empty-sub">从产品配方新建,或直接创建空白估算单开始第一张预算表。</div>' +
+          '<button class="primary small" data-action="new-estimate">' + btnIcon('plus', '新建估算单') + '</button>' +
+        '</div></td></tr>'
+      : rows;
+
     v.innerHTML =
       '<h2 class="sec-title">估算单(批次)</h2>' +
+      stats +
       '<div class="list-actions">' +
-        '<span>基于产品新建:</span>' +
+        '<span class="la-label">基于产品新建:</span>' +
         '<select id="new-est-prod"><option value="">(空白估算单)</option>' + prodOpts + '</select>' +
-        '<button class="primary" data-action="new-estimate">新建估算单</button>' +
+        '<button class="primary" data-action="new-estimate">' + btnIcon('plus', '新建估算单') + '</button>' +
       '</div>' +
       '<table class="grid"><thead><tr>' +
         '<th class="l">名称规格</th><th>预算表编号</th><th>状态</th><th>开始日期</th><th>结束日期</th><th>编制人</th>' +
         '<th>底料/面料锅数</th><th>成本总价①</th><th>成本总价②</th><th>操作</th>' +
       '</tr></thead>' +
-      '<tbody>' + (rows || '<tr><td colspan="10" class="empty-hint">暂无估算单,点击"新建估算单"创建</td></tr>') + '</tbody></table>';
+      '<tbody>' + empty + '</tbody></table>';
   }
 
   // ---------- 估算单编辑器 ----------
@@ -320,12 +394,12 @@
 
     v.innerHTML =
       '<div class="toolbar">' +
-        '<button data-action="editor-back">← 返回估算单列表</button>' +
+        '<button data-action="editor-back">' + btnIcon('back', '返回估算单列表') + '</button>' +
         '<h3 class="editor-title">' + (d.id ? '编辑估算单 · 表格模式' : '新建估算单 · 表格模式') + '</h3>' +
         '<span class="tag ' + (d.status === 'ready' ? 'tag-ready' : 'tag-draft') + '" id="editor-status-tag">' + (d.status === 'ready' ? '可用表格' : '草稿') + '</span>' +
-        '<button data-action="editor-save-draft">存为草稿</button>' +
-        '<button class="primary" data-action="editor-save">保存为可用表格(需填完必填)</button>' +
-        '<button data-action="editor-save-copy">保存为副本</button>' +
+        '<button data-action="editor-save-draft">' + btnIcon('folder', '存为草稿') + '</button>' +
+        '<button class="primary" data-action="editor-save">' + btnIcon('check', '保存为可用表格(需填完必填)') + '</button>' +
+        '<button data-action="editor-save-copy">' + btnIcon('copy', '保存为副本') + '</button>' +
       '</div>' +
       '<div class="fxbar">' +
         '<span class="fx-name" id="fx-name">—</span>' +
@@ -651,6 +725,7 @@
     confirmCancelCb = null;
   }
 
+  let savingEstimate = false; // 防止重复触发保存
   /**
    * 保存估算单。
    * @param status 'draft' | 'ready'
@@ -666,10 +741,13 @@
       toast('还有 ' + missing.length + ' 项必填未填写(如 ' + missing[0].label + ' ' + missing[0].addr + '),只能保存为草稿');
       return false;
     }
+    if (savingEstimate) { toast('正在保存中,请稍候…'); return false; }
     const d = finalizeDraft();
     d.status = status;
     const issues = adjacentIssues(d);
     function commit() {
+      savingEstimate = true;
+      setSaveBtnLoading(true);
       if (asCopy || !d.id) { Store.addEstimate(d); estDraft = d; }
       else { Store.updateEstimate(d.id, d); estDraft.status = status; }
       Store.save().then(function () {
@@ -677,7 +755,13 @@
         toast((status === 'ready' ? '已保存为可用表格' : '已保存为草稿') + (asCopy ? '(副本)' : ''));
         if (after) location.hash = after;
         else location.hash = '#estimates';
-      }).catch(function (err) { toast('保存失败:' + err.message); if (err.status === 401 || err.status === 403) handleAuthExpired(); });
+      }).catch(function (err) {
+        toast('保存失败:' + (err && err.message ? err.message : '请重试'));
+        if (err && (err.status === 401 || err.status === 403)) handleAuthExpired();
+      }).then(function () {
+        savingEstimate = false;
+        setSaveBtnLoading(false);
+      });
     }
     if (issues.length) {
       showConfirm('相邻批次衔接提醒', issues.join('\n') + '\n\n仍要保存吗?', commit, function () {});
@@ -685,6 +769,14 @@
     }
     commit();
     return true;
+  }
+
+  /** 保存期间给编辑器工具栏主保存按钮加上「保存中…」态 */
+  function setSaveBtnLoading(on) {
+    const btn = document.querySelector('[data-action="editor-save"]');
+    if (!btn) return;
+    if (on) { btn.dataset.origHtml = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin" aria-hidden="true"></span><span>保存中…</span>'; }
+    else { btn.disabled = false; if (btn.dataset.origHtml) { btn.innerHTML = btn.dataset.origHtml; delete btn.dataset.origHtml; } }
   }
 
   // ---------- 退出编辑器三选弹窗 ----------
@@ -991,6 +1083,8 @@
         const pname = productFormDraft.name.trim();
         const recipeCount = productFormDraft.recipe.length;
         const doSave = function () {
+          const sb = document.querySelector('[data-action="save-product"]');
+          if (sb) { sb.disabled = true; sb.innerHTML = '<span class="spin" aria-hidden="true"></span><span>保存中…</span>'; }
           if (editingProductId) {
             Store.updateProduct(editingProductId, JSON.parse(JSON.stringify(productFormDraft)));
           } else {
@@ -1001,7 +1095,7 @@
             productFormDraft = null;
             renderProducts();
             toast('产品已保存');
-          });
+          }, function () { if (productFormDraft) renderProducts(); });
         };
         showConfirm('确认保存产品配方', '确定保存产品「' + pname + '」(配方 ' + recipeCount + ' 个材料)吗?', doSave, null);
         break;
@@ -1336,9 +1430,9 @@
           '</select></td>' +
           '<td>' + esc((u.createdAt || '').slice(0, 10)) + '</td>' +
           '<td>' +
-            '<button class="small" data-action="users-reset-pw" data-username="' + esc(u.username) + '">重置密码</button> ' +
+            '<button class="small" data-action="users-reset-pw" data-username="' + esc(u.username) + '">' + btnIcon('edit', '重置密码') + '</button> ' +
             (u.username !== currentUser.username
-              ? '<button class="danger small" data-action="users-del" data-username="' + esc(u.username) + '">删除</button>' : '') +
+              ? '<button class="danger small" data-action="users-del" data-username="' + esc(u.username) + '">' + btnIcon('trash', '删除') + '</button>' : '') +
           '</td>' +
         '</tr>';
       }).join('');
@@ -1350,7 +1444,7 @@
           '<input id="new-user-nick" type="text" placeholder="昵称(可选)">' +
           '<input id="new-user-pw" type="password" placeholder="初始密码(≥6位)">' +
           '<select id="new-user-role"><option value="user">普通用户</option><option value="admin">管理员</option></select>' +
-          '<button class="primary" data-action="users-add">新增用户</button>' +
+          '<button class="primary" data-action="users-add">' + btnIcon('plus', '新增用户') + '</button>' +
         '</div>' +
         '<table class="grid"><thead><tr><th class="l">用户名</th><th>昵称</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>';
