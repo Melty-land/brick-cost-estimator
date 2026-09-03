@@ -29,9 +29,9 @@
       <span>数据备份:</span>
       <button data-action="db-snapshot">快照备份</button>
       <button data-action="db-export">导出备份文件</button>
-      <button data-action="db-import">导入恢复</button>
+      <button data-action="db-import" id="sysbar-import" hidden>导入恢复(管理员)</button>
       <input id="import-file" type="file" accept=".zip,.json" hidden>
-      <span class="sysbar-hint">快照存于 data/backups/;导出为 zip 单文件,可拷走/上传网盘;导入会先自动快照再覆盖。</span>
+      <span class="sysbar-hint">快照存于 data/backups/;导出为 zip 单文件,可拷走/上传网盘;导入需管理员,导入前会自动快照再覆盖。</span>
     </div>
   </header>
 

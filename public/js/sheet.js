@@ -3,9 +3,9 @@
  * 版式与《砖成本材料预算表_黑白打印版.xlsx》一致(标题/表头/底料·面料配比/材料清单/成本核算)。
  *
  * 计算列的默认公式与本系统计算口径一致:
- *   - 单价 元/吨;金额(元/锅) = 单价×数量(公斤)/1000
- *   - 库存 = 上存+进料;清单金额 = 单价×数量(吨)
- *   - 本期用料数量(吨) = 配比数量×锅数/1000;本期用料单价 = 单价;本期用料金额 = 单价×用量
+ *   - 单价 = 元/公斤(用户录入,如 0.258 元/kg = 258 元/吨);数量 = 公斤
+ *   - 金额 = 单价×数量(公斤),直乘不换算
+ *   - 材料吨价(元/吨) = 本期用料金额合计 ÷ 本期用料数量合计 × 1000
  *   - 占比一律按"使用数量"口径;模数 = 止模-始模+1;成本总价①/② 双口径
  * 默认公式可被用户覆盖(随估算单持久化),覆盖后仍可被引用/重算。
  *
@@ -32,7 +32,7 @@
     'calc.perPalletCount': 1, 'calc.perPalletSqm': 1
   };
   var PATH_LABELS = {
-    name: '名称规格', code: '产品编号', startDate: '开始日期', endDate: '结束日期', author: '编制人',
+    name: '名称规格', code: '预算表编号', startDate: '开始日期', endDate: '结束日期', author: '编制人',
     potBottom: '底料锅数', potTop: '面料锅数',
     'calc.length': '砖长', 'calc.width': '砖宽', 'calc.height': '砖高',
     'calc.perPieceWeight': '每块重量', 'calc.perModuleCount': '每模块数', 'calc.moldManual': '模数',
@@ -114,11 +114,11 @@
     var r = addRow();
     place(r, 0, { kind: 'label', text: TITLE, span: COL_COUNT, cls: 'title' });
 
-    // ===== 行 2:表头信息(名称规格 | 产品编号 | 开始日期 | 结束日期 | 编制人) =====
+    // ===== 行 2:表头信息(名称规格 | 预算表编号 | 开始日期 | 结束日期 | 编制人) =====
     r = addRow();
     place(r, 0, lab(0, r, '名称规格', 'lab', 1));
     place(r, 1, inp(1, r, 'name', est.name != null ? String(est.name) : '', 'text', 1));
-    place(r, 2, lab(2, r, '产品编号', 'lab', 1));
+    place(r, 2, lab(2, r, '预算表编号', 'lab', 1));
     place(r, 3, inp(3, r, 'code', est.code != null ? String(est.code) : '', 'text', 1));
     place(r, 4, lab(4, r, '开始日期', 'lab', 1));
     place(r, 5, inp(5, r, 'startDate', est.startDate || '', 'date', 2));
@@ -275,8 +275,8 @@
     place(r, 8, lab(8, r, '成品率', 'lab', 1));
     place(r, 9, fx(9, r, '=IF(F' + R2 + '=0,"",IF(H' + R2 + '="","",H' + R2 + '/F' + R2 + '))', 1, true, 'calc.yieldRate'));
     place(r, 10, lab(10, r, '材料吨价(元/吨)', 'lab', 1));
-    // 材料吨价 = 本期用料金额合计 ÷ 本期用料数量合计 ÷ 1000(自动)
-    place(r, 11, fx(11, r, '=IF(J' + (listSumRow || listStart) + '=0,"",K' + (listSumRow || listStart) + '/J' + (listSumRow || listStart) + '/1000)', 1, false, 'calc.tonPrice'));
+    // 材料吨价 = 本期用料金额合计 ÷ 本期用料数量合计 × 1000(元/吨;单价按元/kg 录入,乘 1000 换算为吨价)
+    place(r, 11, fx(11, r, '=IF(J' + (listSumRow || listStart) + '=0,"",K' + (listSumRow || listStart) + '/J' + (listSumRow || listStart) + '*1000)', 1, false, 'calc.tonPrice'));
 
     var R3 = r + 1;
     r = addRow();
@@ -294,8 +294,9 @@
     r = addRow();
     place(r, 0, lab(0, r, '成本总价①(本期用料金额合计)', 'lab', 1));
     place(r, 1, fx(1, r, '=K' + (listSumRow || listStart), 5));
-    place(r, 6, lab(6, r, '成本总价②(材料吨价×用料总量·公斤)', 'lab', 1));
-    place(r, 7, fx(7, r, '=L' + R2 + '*J' + (listSumRow || listStart), 5));
+    place(r, 6, lab(6, r, '成本总价②(材料吨价×用料总量·吨)', 'lab', 1));
+    // ② = 材料吨价(元/吨) × 用料总量(吨 = 公斤/1000);默认与 ① 一致(交叉复核)
+    place(r, 7, fx(7, r, '=L' + R2 + '*J' + (listSumRow || listStart) + '/1000', 5));
 
     var maxRow = r;
 

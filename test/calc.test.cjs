@@ -53,9 +53,9 @@ assert.strictEqual(c.listTotals.usageKg, 5800);
 assert.strictEqual(c.listTotals.usageAmount, 1720000);
 // 材料清单占比按使用数量(公斤):黑水泥 2000/5800
 assert.ok(Math.abs(c.rows[0].ratio - 2000 / 5800) < 1e-12);
-// 成本总价① = 本期用料金额合计;② = 材料吨价×总用量(公斤)直乘
+// 成本总价① = 本期用料金额合计;② = 材料吨价(元/吨) × 用料总量(吨 = 公斤/1000)
 assert.strictEqual(c.calc.costTotal1, 1720000);
-assert.strictEqual(c.calc.costTotal2, 1740000);
+assert.strictEqual(c.calc.costTotal2, 1740); // 300 元/吨 × 5800 公斤 ÷ 1000 = 1740 元
 // 模数 = 止模-始模+1
 assert.strictEqual(c.calc.mold, 5);
 

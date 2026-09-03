@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS estimate_rows (
 );
 CREATE TABLE IF NOT EXISTS users (
   username TEXT PRIMARY KEY, nickname TEXT, role TEXT DEFAULT 'user',
-  salt TEXT, hash TEXT, created_at TEXT
+  status TEXT DEFAULT 'active', salt TEXT, hash TEXT, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY, username TEXT, exp INTEGER
@@ -81,6 +81,11 @@ function openDb() {
   db = new DatabaseSync(DB_FILE);
   db.exec('PRAGMA journal_mode=WAL;');
   db.exec(DDL);
+  // 兼容旧库:users 表缺 status 列时补充(ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS)
+  const userCols = db.prepare("PRAGMA table_info(users)").all().map(function (c) { return c.name; });
+  if (userCols.indexOf('status') < 0) {
+    db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+  }
 }
 
 function metaGet(key, def) {
@@ -261,7 +266,13 @@ function authUser(req) {
     return null;
   }
   const u = db.prepare('SELECT * FROM users WHERE username=?').get(s.username);
-  return u ? userPublic(u) : null;
+  if (!u) return null;
+  // 账号被停用:立即失效(含已签发 token)
+  if (u.status === 'disabled') {
+    db.prepare('DELETE FROM sessions WHERE username=?').run(u.username);
+    return null;
+  }
+  return userPublic(u);
 }
 function requireAuth(req, res) {
   const u = authUser(req);

@@ -5,10 +5,10 @@
  * Node 导出:  module.exports
  *
  * 单位约定(用户已确认):
- *   单价       = 元/吨(全表统一)
+ *   单价       = 元/公斤(录入 0.258 元/kg = 258 元/吨)
  *   配比数量   = 公斤/锅
- *   材料清单   = 吨
- *   1 吨 = 1000 公斤
+ *   材料清单   = 公斤(全表公斤直乘,不换算)
+ *   材料吨价   = 元/吨(自动 = 金额合计 ÷ 用量合计 × 1000)
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -136,7 +136,8 @@
     var calc = {
       mold: mold,
       costTotal1: listTotals.usageAmount,                        // 口径①:本期用料金额合计
-      costTotal2: num(tonPriceRaw) * listTotals.usageKg          // 口径②:材料吨价 × 本期用料总量(公斤)
+      // 口径②:材料吨价(元/吨) × 用料总量(吨 = 公斤/1000);与 ① 交叉一致
+      costTotal2: num(tonPriceRaw) * listTotals.usageKg / 1000
     };
 
     return { rows: list, bottom: bottom, top: top, listTotals: listTotals, calc: calc };

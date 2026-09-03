@@ -68,14 +68,14 @@ data.estimates.push(makeEstimate('e1', '张三', 10, 8, '2026-09-01', '2026-09-3
   length: 240, width: 115, height: 53, perPieceWeight: 3.5, perModuleCount: 30, moldManual: 2,
   perSqmWeight: 126.81159420289855, perCubicWeight: 2392.672476439023, perPalletCount: 300,
   perPalletSqm: 10, perPalletWeight: 1268.1159420289854, planCount: 1.656, actualCount: '',
-  yieldRate: '', tonPrice: 0.2432865731462926, perSqmPrice: 1466183.5748792272,
+  yieldRate: '', tonPrice: 243286.5731462926, perSqmPrice: 1466183.5748792272,
   startMold: 1, endMold: 5
 }));
 data.estimates.push(makeEstimate('e2', '李四', 12, 10, '2026-10-01', '2026-10-31', {
   length: 240, width: 115, height: 53, perPieceWeight: 3.5, perModuleCount: 30, moldManual: 2,
   perSqmWeight: 126.81159420289855, perCubicWeight: 2392.672476439023, perPalletCount: 300,
   perPalletSqm: 10, perPalletWeight: 1268.1159420289854, planCount: 1.656, actualCount: '',
-  yieldRate: '', tonPrice: 0.24540630182421228, perSqmPrice: 1787198.0676328503,
+  yieldRate: '', tonPrice: 245406.30182421228, perSqmPrice: 1787198.0676328503,
   startMold: 6, endMold: 10
 }));
 data.seq.estimate = 2;

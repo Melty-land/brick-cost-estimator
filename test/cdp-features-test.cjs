@@ -78,11 +78,14 @@ async function main() {
   const codeCell = await cellText('D2');
   const qty6 = await cellText('D6');      // 底料首行(黑水泥)每锅数量
   const rowCount = await evalJS(`document.querySelectorAll('td[data-addr^="B"]').length`);
-  if (nameCell !== '标砖 240×115×53' || codeCell !== 'BZ-240' || qty6 !== '200') {
+  if (nameCell !== '标砖 240×115×53' || qty6 !== '200') {
     console.error('✗ 导入配方未自动填写: ' + JSON.stringify({ nameCell, codeCell, qty6 })); process.exit(1);
   }
+  if (codeCell !== '') {
+    console.error('✗ 预算表编号不应随配方自动带入(应手动填写): ' + JSON.stringify({ nameCell, codeCell, qty6 })); process.exit(1);
+  }
   if (rowCount < 10) { console.error('✗ 材料行数量异常: ' + rowCount); process.exit(1); }
-  console.log('✓ ⑤ 导入产品配方:名称规格/编号自动填入,材料行与每锅用量(黑水泥 D6=200)已填充');
+  console.log('✓ ⑤ 导入产品配方:名称规格/材料行/每锅用量(黑水泥 D6=200)已填充;预算表编号留空由用户手动填写');
 
   // 已有材料行时再次选择同一产品 -> 应弹确认;确认后替换
   await evalJS(`(() => {

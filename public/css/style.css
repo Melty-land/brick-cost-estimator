@@ -37,6 +37,8 @@ body {
 .sysbar-hint { opacity: .75; }
 
 main { max-width: 1280px; margin: 16px auto; padding: 0 16px; }
+/* 估算单编辑器:1920 宽屏下整张预算表无需横向滚动即可完整显示 */
+body.editor-wide main { max-width: 1620px; }
 
 /* ---- 用户栏 ---- */
 .user-area { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -208,22 +210,27 @@ td.money { color: #14508f; }
 #fx-input { flex: 1; border: none; outline: none; font-size: 14px; padding: 2px 4px; }
 .sheet-hint { color: #888; font-size: 12px; margin: 4px 0 8px; line-height: 1.6; }
 .sheet-scroll { overflow-x: auto; border: 1px solid #b6bcc6; border-radius: 4px; background: #fff; }
-table.sheet-grid { border-collapse: collapse; table-layout: fixed; min-width: 1120px; }
-table.sheet-grid col.col-A { width: 46px; }
-table.sheet-grid col.col-B { width: 150px; }
-table.sheet-grid col.col-C { width: 96px; }
-table.sheet-grid col.col-D { width: 104px; }
-table.sheet-grid col.col-E, table.sheet-grid col.col-F, table.sheet-grid col.col-G,
-table.sheet-grid col.col-H, table.sheet-grid col.col-I, table.sheet-grid col.col-J { width: 96px; }
-table.sheet-grid col.col-K { width: 104px; }
-table.sheet-grid col.col-L { width: 110px; }
+/* 预算表整体宽度:锁死总宽,列宽按预算表版式分配;1920 全屏配合 main 加宽可整表显示 */
+table.sheet-grid { border-collapse: collapse; table-layout: fixed; width: 1490px; min-width: 0; }
+table.sheet-grid col.col-A { width: 40px; }
+table.sheet-grid col.col-B { width: 300px; }
+table.sheet-grid col.col-C { width: 120px; }
+table.sheet-grid col.col-D { width: 120px; }
+table.sheet-grid col.col-E { width: 100px; }
+table.sheet-grid col.col-F { width: 100px; }
+table.sheet-grid col.col-G { width: 100px; }
+table.sheet-grid col.col-H { width: 100px; }
+table.sheet-grid col.col-I { width: 100px; }
+table.sheet-grid col.col-J { width: 130px; }
+table.sheet-grid col.col-K { width: 130px; }
+table.sheet-grid col.col-L { width: 90px; }
 table.sheet-grid th.corner, table.sheet-grid th.colh { background: #dde3ea; border: 1px solid #b6bcc6;
   font-size: 11px; color: #445; padding: 3px; text-align: center; font-weight: 600; }
 table.sheet-grid td.sg { border: 1px solid #c6ccd6; padding: 4px 6px; font-size: 13px;
   height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.sheet-grid td.sg.hdr { text-align: center; font-weight: 600; background: #eef1f5; white-space: normal; line-height: 1.35; padding: 3px 4px; }
 table.sheet-grid td.sg.title { text-align: center; font-weight: 700; font-size: 15px; background: #eef1f5; }
 table.sheet-grid td.sg.sech { text-align: center; font-weight: 700; background: #e3e8ef; }
-table.sheet-grid td.sg.hdr { text-align: center; font-weight: 600; background: #eef1f5; }
 table.sheet-grid td.sg.lab { background: #f2f4f7; color: #444; text-align: left; font-size: 12px; }
 table.sheet-grid td.sg.mat { text-align: left; }
 table.sheet-grid td.sg.seq { text-align: center; color: #666; }

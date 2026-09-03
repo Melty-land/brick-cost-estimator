@@ -14,3 +14,7 @@ README-restart.md
 restart-server.ps1
 server.pid
 data/data.json
+data/*.bak-current
+data/restored-userdata.db*
+data/userdata-restored.json
+data/.userdata-cache.json

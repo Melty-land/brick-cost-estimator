@@ -83,6 +83,7 @@
       return;
     }
     currentView = name;
+    document.body.classList.toggle('editor-wide', name === 'editor');
     $$('.view').forEach(function (s) { s.hidden = s.id !== 'view-' + name; });
     $$('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.view === name); });
     if (name === 'materials') renderMaterials();
@@ -226,7 +227,7 @@
         '<button class="primary" data-action="new-estimate">新建估算单</button>' +
       '</div>' +
       '<table class="grid"><thead><tr>' +
-        '<th class="l">名称规格</th><th>产品编号</th><th>状态</th><th>开始日期</th><th>结束日期</th><th>编制人</th>' +
+        '<th class="l">名称规格</th><th>预算表编号</th><th>状态</th><th>开始日期</th><th>结束日期</th><th>编制人</th>' +
         '<th>底料/面料锅数</th><th>成本总价①</th><th>成本总价②</th><th>操作</th>' +
       '</tr></thead>' +
       '<tbody>' + (rows || '<tr><td colspan="10" class="empty-hint">暂无估算单,点击"新建估算单"创建</td></tr>') + '</tbody></table>';
@@ -246,8 +247,8 @@
     return {
       id: null, productId: p ? p.id : null,
       status: 'draft', // draft=草稿 / ready=可用表格
-      name: p ? p.name : '', code: p ? p.code : '',
-      startDate: today(), endDate: '', author: '',
+      name: p ? p.name : '', code: '',
+      startDate: today(), endDate: '', author: currentUser ? currentUser.username : '',
       potBottom: '', potTop: '', rows: rows,
       calc: {
         perPieceWeight: '', perModuleCount: '', moldManual: '', perSqmWeight: '',
@@ -523,14 +524,14 @@
       estDraft.rows = rows;
       estDraft.productId = p.id;
       estDraft.name = p.name;
-      estDraft.code = p.code || '';
+      // 预算表编号独立于产品编号,不再随配方自动带入(由用户手动填写)
       gridDirty = true;
       clearGridOverrides('已按产品配方导入材料行,公式覆盖已清空');
       renderEstimateEditor();
       toast('已导入产品配方:' + p.name + '(' + rows.length + ' 个材料)');
     };
     if (estDraft.rows.length) {
-      showConfirm('确认导入产品配方', '当前估算单已有 ' + estDraft.rows.length + ' 行材料,导入产品「' + p.name + '」会替换为按该配方生成的 ' + p.recipe.length + ' 行(名称规格/产品编号一并更新)。继续吗?', doApply, null);
+      showConfirm('确认导入产品配方', '当前估算单已有 ' + estDraft.rows.length + ' 行材料,导入产品「' + p.name + '」会替换为按该配方生成的 ' + p.recipe.length + ' 行(名称规格一并更新)。继续吗?', doApply, null);
     } else {
       doApply();
     }
@@ -573,7 +574,7 @@
     const v = est && est.calc ? est.calc.startMold : '';
     return (v === '' || v === null || v === undefined) ? null : Number(v);
   }
-  /** 同产品编号相邻批次的衔接校验(日期不重叠 + 模数递增) */
+  /** 同预算表编号相邻批次的衔接校验(日期不重叠 + 模数递增) */
   function adjacentIssues(est) {
     const code = String(est.code || '').trim();
     if (!code) return [];
@@ -713,7 +714,7 @@
         }).join('') + '</tr>';
       };
       const rows = [
-        fieldRow('产品编号', function (x) { return esc(x.e.code || '—'); }),
+        fieldRow('预算表编号', function (x) { return esc(x.e.code || '—'); }),
         fieldRow('开始日期', function (x) { return esc(x.e.startDate || '—'); }),
         fieldRow('结束日期', function (x) { return esc(x.e.endDate || '—'); }),
         fieldRow('编制人', function (x) { return esc(x.e.author || '—'); }),
@@ -1192,6 +1193,8 @@
         estDraft = null;
         $('#user-area').hidden = true;
         $('#tab-users').hidden = true;
+        const impBtn = $('#sysbar-import');
+        if (impBtn) impBtn.hidden = true;
         location.hash = '';
         showAuth('login');
         toast('已退出登录');
@@ -1236,6 +1239,9 @@
     $('#user-area').hidden = false;
     $('#user-badge').textContent = (currentUser.nickname || currentUser.username) + ' · ' + (currentUser.role === 'admin' ? '管理员' : '普通用户');
     $('#tab-users').hidden = currentUser.role !== 'admin';
+    // 导入恢复为管理员专属(备份快照/导出则登录即可用)
+    const impBtn = $('#sysbar-import');
+    if (impBtn) impBtn.hidden = currentUser.role !== 'admin';
   }
   async function afterAuth() {
     renderUserBar();
@@ -1253,6 +1259,8 @@
     currentUser = null;
     $('#user-area').hidden = true;
     $('#tab-users').hidden = true;
+    const impBtn = $('#sysbar-import');
+    if (impBtn) impBtn.hidden = true;
     showAuth('login');
     toast('登录已过期,请重新登录');
   }
