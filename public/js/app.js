@@ -1257,8 +1257,8 @@
     data = await Store.load();
     hideAuth();
     if (!location.hash) {
-      const latest = data.estimates.length ? data.estimates[data.estimates.length - 1].id : null;
-      location.hash = latest ? '#estimate/' + latest : '#estimates';
+      // 默认进入「估算单」列表界面(不再直接打开最近估算单的表格编辑器)
+      location.hash = '#estimates';
       return;
     }
     applyHash();

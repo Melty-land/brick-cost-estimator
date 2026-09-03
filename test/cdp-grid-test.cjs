@@ -92,13 +92,13 @@ async function main() {
     return 'ok';
   })()`);
 
-  // 默认首页:无 hash 时应打开最近估算单的表格编辑器
+  // 默认首页:无 hash 登录后应进入「估算单」列表界面(不再是表格编辑器)
   const booted = await waitFor(`(() => {
-    const v = document.getElementById('view-editor');
-    return v && !v.hidden && !!document.querySelector('td[data-addr="C6"]') && location.hash.startsWith('#estimate/');
+    const v = document.getElementById('view-estimates');
+    return v && !v.hidden && location.hash === '#estimates' && document.querySelectorAll('#view-estimates tbody tr').length >= 2;
   })()`);
-  if (!booted) { console.error('✗ 默认首页未打开最近估算单表格'); process.exit(1); }
-  console.log('✓ 默认首页:自动打开最近估算单的 Excel 化表格(' + (await evalJS('location.hash')) + ')');
+  if (!booted) { console.error('✗ 默认首页未打开估算单列表'); process.exit(1); }
+  console.log('✓ 默认首页:登录后进入估算单列表界面(' + (await evalJS('location.hash')) + ')');
 
   // 切到 e1 进行数值断言
   await evalJS(`location.hash = '#estimate/e1'`);
