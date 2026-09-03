@@ -40,10 +40,18 @@ async function main() {
     execSync(cmd, { stdio: 'inherit', shell: true });
   }
 
-  // 3) 恢复用户数据(若执行前存在用户数据)
+  // 3) 恢复用户数据(若执行前存在用户数据);失败自动重试(服务偶发不可达)
   if (hasUserData) {
-    const put = await api('api/data', 'PUT', cur, token);
-    console.log('✓ 已恢复用户数据:' + (put.status === 200 ? 'PUT ok' : 'PUT ' + put.status));
+    let put = null;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        put = await api('api/data', 'PUT', cur, token);
+        if (put.status === 200) break;
+      } catch (e) { put = { status: 'ERR ' + e.message }; }
+      console.log('  ↻ 恢复重试 ' + attempt + '/5 ...');
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    console.log('✓ 已恢复用户数据:' + (put && put.status === 200 ? 'PUT ok' : JSON.stringify(put)));
   }
 }
 
