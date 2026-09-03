@@ -15,6 +15,8 @@
   const compareSel = new Set();    // 对比勾选的估算单 id
   let chartEstId = null;           // 图表页环形图选中的估算单 id
   let chartMatMode = 'amount';     // 图表页材料汇总模式: 'amount' 金额 / 'kg' 用量(公斤)
+  let estDateFrom = '';            // 估算单列表日期筛选:开始日期(YYYY-MM-DD,空=不限)
+  let estDateTo = '';              // 估算单列表日期筛选:结束日期(空=不限)
   // ---- 表格编辑器(Excel 化)状态 ----
   let gridOverF = {};              // 单元格公式覆盖 {addr: '=...'}
   let gridOverV = {};              // 单元格静态覆盖 {addr: 文本}
@@ -60,6 +62,8 @@
     'upload': '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
     'camera': '<path d="M4 7h3l2-2h6l2 2h3v12H4V7z"/><circle cx="12" cy="13" r="3.5"/>',
     'inbox': '<path d="M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6zM3 13h5l2 2h4l2-2h5"/>',
+    'search': '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+    'calendar': '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
     'chart': '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     'calc': '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
     'logout': '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/>',
@@ -258,13 +262,29 @@
   }
 
   // ---------- 估算单列表 ----------
+  /** 日期筛选命中:预算单区间 [s,e] 与筛选区间 [from,to] 有交集。
+   *  空 from/to 表示不限;预算单缺一端日期时按单点区间处理;无日期的单仅在不筛选时保留。 */
+  function estInRange(e, from, to) {
+    if (!from && !to) return true;
+    const s = String(e.startDate || '').trim();
+    const en = String(e.endDate || '').trim();
+    if (!s && !en) return false;                       // 无日期的草稿在筛选时排除
+    const LO = '0000-01-01', HI = '9999-12-31';        // 字符串比较的"无穷"
+    const s1 = s || en, s2 = en || s;                  // 预算单区间端点(缺一端则取另一端)
+    const f1 = from || LO, f2 = to || HI;              // 筛选区间端点
+    // 两区间不相交 ⇔ 单区间整体在筛选左( s2 < f1 )或在筛选右( s1 > f2 )
+    return !(s2 < f1 || s1 > f2);
+  }
+
   function renderEstimates() {
     const v = $('#view-estimates');
     const prodOpts = data.products.map(function (p) {
       return '<option value="' + p.id + '">' + esc(p.name) + '（' + esc(p.code || '无编号') + '）</option>';
     }).join('');
     const all = data.estimates.slice().reverse();
-    const rows = all.map(function (e) {
+    const from = estDateFrom, to = estDateTo;
+    const filtered = all.filter(function (e) { return estInRange(e, from, to); });
+    const rows = filtered.map(function (e) {
       const c = CostCalc.compute(e);
       const st = e.status === 'ready' ? 'ready' : 'draft';
       return '<tr>' +
@@ -285,10 +305,10 @@
       '</tr>';
     }).join('');
 
-    // 顶部统计条(KPI 卡):总批次 / 可用 / 草稿 / 成本总价①合计
-    const nReady = all.filter(function (e) { return e.status === 'ready'; }).length;
-    const nDraft = all.length - nReady;
-    const sumCost = all.reduce(function (s, e) {
+    // 顶部统计条(KPI 卡):统计范围与筛选同步(基于 filtered)
+    const nReady = filtered.filter(function (e) { return e.status === 'ready'; }).length;
+    const nDraft = filtered.length - nReady;
+    const sumCost = filtered.reduce(function (s, e) {
       const c = CostCalc.compute(e);
       return s + (isFinite(c.calc.costTotal1) ? c.calc.costTotal1 : 0);
     }, 0);
@@ -300,24 +320,47 @@
     };
     const stats = all.length
       ? '<div class="kpi-row">' +
-          statCard('估算单(批次)', fmt(all.length, 0), '', 'folder') +
+          statCard('估算单(批次)', fmt(filtered.length, 0), '', 'folder') +
           statCard('可用表格', fmt(nReady, 0), 'kpi-ok', 'check') +
           statCard('草稿', fmt(nDraft, 0), 'kpi-warn', 'edit') +
           statCard('成本总价①合计(元)', '¥' + fmt(sumCost, 0), 'kpi-cost', 'chart') +
         '</div>'
       : '';
 
-    const empty = !all.length
-      ? '<tr><td colspan="10"><div class="empty-state">' + icon('inbox', 34) +
+    // 日期筛选条
+    const hasFilter = !!(from || to);
+    const filterBar =
+      '<div class="date-filter">' +
+        '<span class="df-label">' + icon('view', 15) + '按时间段筛选:</span>' +
+        '<input type="date" id="est-date-from" value="' + esc(from || '') + '" title="开始日期(含)">' +
+        '<span class="df-sep">至</span>' +
+        '<input type="date" id="est-date-to" value="' + esc(to || '') + '" title="结束日期(含)">' +
+        (hasFilter ? '<button class="small" id="est-date-clear" data-action="est-date-clear">' + btnIcon('trash', '清除筛选') + '</button>' : '') +
+        '<span class="df-count">' + (hasFilter ? '显示 ' + filtered.length + ' / ' + all.length + ' 批次' : '共 ' + all.length + ' 批次') + '</span>' +
+      '</div>';
+
+    // 空态分两种:全库无 / 筛选无结果
+    let empty;
+    if (!all.length) {
+      empty = '<tr><td colspan="10"><div class="empty-state">' + icon('inbox', 34) +
           '<div class="empty-title">暂无估算单</div>' +
           '<div class="empty-sub">从产品配方新建,或直接创建空白估算单开始第一张预算表。</div>' +
           '<button class="primary small" data-action="new-estimate">' + btnIcon('plus', '新建估算单') + '</button>' +
-        '</div></td></tr>'
-      : rows;
+        '</div></td></tr>';
+    } else if (!filtered.length) {
+      empty = '<tr><td colspan="10"><div class="empty-state">' + icon('search', 34) +
+          '<div class="empty-title">该时间段暂无估算单</div>' +
+          '<div class="empty-sub">调整筛选日期范围,或清除筛选查看全部批次。</div>' +
+          '<button class="primary small" data-action="est-date-clear">' + btnIcon('trash', '清除筛选') + '</button>' +
+        '</div></td></tr>';
+    } else {
+      empty = rows;
+    }
 
     v.innerHTML =
       '<h2 class="sec-title">估算单(批次)</h2>' +
       stats +
+      (all.length ? filterBar : '') +
       '<div class="list-actions">' +
         '<span class="la-label">基于产品新建:</span>' +
         '<select id="new-est-prod"><option value="">(空白估算单)</option>' + prodOpts + '</select>' +
@@ -1012,6 +1055,24 @@
       const selEl = $('#grid-pick-product');
       if (selEl) selEl.value = '';
     }
+    // 估算单列表日期筛选
+    if (el.id === 'est-date-from' || el.id === 'est-date-to') {
+      const f = $('#est-date-from'), t = $('#est-date-to');
+      let fv = f ? f.value : '', tv = t ? t.value : '';
+      // 非法区间(开始>结束):提示并回滚本次输入,维持原筛选
+      if (fv && tv && fv > tv) {
+        toast('开始日期不能晚于结束日期');
+        const prevFrom = estDateFrom, prevTo = estDateTo;
+        if (el.id === 'est-date-from') { estDateFrom = prevFrom; estDateTo = prevTo; fv = prevFrom; if (f) f.value = prevFrom; }
+        else { estDateFrom = prevFrom; estDateTo = prevTo; tv = prevTo; if (t) t.value = prevTo; }
+      }
+      if (estDateFrom !== fv || estDateTo !== tv) {
+        estDateFrom = fv;
+        estDateTo = tv;
+        renderEstimates();
+      }
+      return;
+    }
   });
 
   document.addEventListener('click', function (e) {
@@ -1104,6 +1165,11 @@
         editingProductId = null;
         productFormDraft = null;
         renderProducts();
+        break;
+      case 'est-date-clear':
+        estDateFrom = '';
+        estDateTo = '';
+        renderEstimates();
         break;
       case 'new-estimate': {
         const pid = $('#new-est-prod').value;
@@ -1412,6 +1478,8 @@
     compareSel.clear();
     chartEstId = null;
     chartMatMode = 'amount';
+    estDateFrom = '';
+    estDateTo = '';
     productFormDraft = null;
     editingProductId = null;
   }

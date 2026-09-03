@@ -440,3 +440,17 @@ button:not(.primary) .spin { border-color: rgba(0, 0, 0, .25); border-top-color:
 
 /* 弹窗内按钮内联图标支持 */
 .modal-actions button { display: inline-flex; align-items: center; }
+
+/* ================= 估算单日期筛选条 ================= */
+.date-filter {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 2px 0 14px; padding: 10px 14px;
+  background: var(--surface-2); border-radius: 12px;
+  font-size: 13px;
+}
+.date-filter .df-label { display: inline-flex; align-items: center; color: var(--text-2); font-weight: 500; }
+.date-filter .df-label svg.ic { margin-right: 3px; color: var(--primary); }
+.date-filter .df-sep { color: var(--text-3); }
+.date-filter input[type="date"] { width: 138px; }
+.date-filter .df-count { margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
+.date-filter .df-count:empty { display: none; }
