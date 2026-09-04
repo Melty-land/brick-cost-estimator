@@ -342,6 +342,13 @@ table.sheet-grid td.sg.in { background: var(--surface); text-align: right; curso
 table.sheet-grid td.sg.fx { background: var(--primary-soft); text-align: right; color: var(--primary); font-weight: 600; cursor: cell; font-family: var(--font-num); }
 table.sheet-grid td.sg.err { color: var(--danger); font-weight: 700; background: var(--danger-bg); }
 table.sheet-grid td.sg.sel { outline: 2px solid var(--primary); outline-offset: -2px; background: #eef7ff; }
+/* ---- 引用追踪高亮(点击单元格时显示公式影响链) ---- */
+/* 来源格(被当前公式引用):绿色系,与选中蓝区分 */
+table.sheet-grid td.sg.trace-src { background: #e6f6ea; color: #1d7f3a; font-weight: 600; box-shadow: inset 0 0 0 1.5px rgba(52, 199, 89, .55); }
+/* 从属格(引用当前格的公式结果):橙色系 */
+table.sheet-grid td.sg.trace-dep { background: #fdf0e0; color: #92600a; font-weight: 600; box-shadow: inset 0 0 0 1.5px rgba(217, 119, 6, .6); }
+/* 同时命中的格按颜色优先级显示(从属 > 来源) */
+table.sheet-grid td.sg.sel.trace-src, table.sheet-grid td.sg.sel.trace-dep { box-shadow: inset 0 0 0 2px var(--primary); }
 table.sheet-grid td.void { border: 1px solid transparent; }
 .chip-bar { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .chip-hint { color: var(--text-3); font-size: 12px; }

@@ -182,6 +182,7 @@ node test/auth-perm-check.cjs  # 权限细节(停用踢下线/自保护/最后�
 node test/db-backup-check.cjs  # 备份导出/导入验证
 node test/cdp-test.cjs         # 浏览器主流程(需本机装有 Edge)
 node test/cdp-grid-test.cjs    # 浏览器表格编辑器
+node test/cdp-trace-test.cjs   # 引用追踪高亮(公式影响链)
 node test/cdp-rules-test.cjs   # 必填/草稿/退出弹窗/相邻校验
 node test/cdp-crud-test.cjs    # 浏览器 CRUD
 node test/cdp-charts-test.cjs  # 浏览器图表

@@ -622,9 +622,87 @@
     v.querySelectorAll('td[data-editable]').forEach(function (td) {
       td.classList.toggle('sel', td.dataset.addr === gridSel);
     });
+    paintTrace(v);
     const inputEl = $('#fx-input');
     // preventScroll:避免把顶部公式栏滚进视口导致页面跳顶
     if (inputEl && gridSel && !inputEl.disabled) inputEl.focus({ preventScroll: true });
+  }
+
+  // ---------- 引用追踪:点击单元格高亮与其结果相关的格子(Excel 式影响链) ----------
+  // 已知引用集(供 fast path):parseRefs 的返回中含函数名与字母数字引用,统一按引用格处理前过滤。
+  function addrRefsOf(effText) {
+    const keys = Formula.parseRefs(effText);
+    const seen = {};
+    const out = [];
+    keys.forEach(function (k) {
+      const addr = String(k).toUpperCase();
+      if (!/^[A-Z]+\d+$/.test(addr)) return;          // 过滤函数名/非地址 token
+      if (seen[addr]) return;
+      seen[addr] = 1;
+      const def = gridCache && gridCache.addrCells ? gridCache.addrCells[addr] : null;
+      if (def && def.kind !== 'blank') out.push(addr);
+    });
+    return out;
+  }
+  /** 当前选中格的影响链:src=其公式直接引用的格;dep=直接或经公式链引用它的公式格。 */
+  function traceOf(addr) {
+    const src = [], dep = [], seenDep = {}, seenSrc = {};
+    const ac = (gridCache && gridCache.addrCells) || {};
+    const effF = (gridCache && gridCache.effF) || {};
+    const cur = ac[addr];
+    if (!cur) return { src: src, dep: dep };
+    // 1) 来源:当前格若是公式格(含被覆盖成公式),列出其引用的格子
+    if (effF[addr] !== undefined || (cur.kind === 'formula' && gridOverF[addr] === undefined && gridOverV[addr] === undefined)) {
+      const fText = effF[addr] !== undefined ? effF[addr]
+        : (gridOverF[addr] || (cur.f !== undefined ? cur.f : ''));
+      addrRefsOf(fText).forEach(function (a) {
+        if (a === addr || seenSrc[a]) return;
+        seenSrc[a] = 1;
+        src.push(a);
+      });
+    } else if (cur.kind === 'input') {
+      // 2) 输入格:无来源;直接看哪些公式引用它(见下方 dep)
+    }
+    // 3) 从属:遍历所有公式格,递归收集直接/间接引用当前格的公式格
+    const visitDep = function (target, isFirst) {
+      Object.keys(effF).forEach(function (a) {
+        if (a === target && !isFirst) return;
+        if (seenDep[a]) return;
+        const refs = addrRefsOf(effF[a]);
+        if (refs.indexOf(target) >= 0) {
+          seenDep[a] = 1;
+          dep.push(a);
+          visitDep(a, false); // 该公式格若又被别的公式引用,继续向上游追踪
+        }
+      });
+    };
+    visitDep(addr, true);
+    return { src: src, dep: dep };
+  }
+  function paintTrace(v) {
+    if (!v) return;
+    v.querySelectorAll('td.trace-src, td.trace-dep').forEach(function (td) {
+      td.classList.remove('trace-src', 'trace-dep');
+    });
+    if (!gridSel || !gridCache) return;
+    const t = traceOf(gridSel);
+    const apply = function (list, cls) {
+      list.forEach(function (a) {
+        const td = v.querySelector('[data-addr="' + a + '"]');
+        if (td) td.classList.add(cls);
+      });
+    };
+    // 输入格/无公式格:橙=被哪些公式引用(结果联动);公式格:绿=它引用了谁,橙=它又被谁引用
+    // 注意:输入格可被用户覆盖成公式(gridOverF),此时按公式格追踪——以 effF 是否含该格为准
+    const eff = (gridCache && gridCache.effF) || {};
+    const cur = gridCache.addrCells[gridSel];
+    const isFxCell = eff[gridSel] !== undefined;
+    if (isFxCell) {
+      apply(t.src, 'trace-src');       // 公式引用的来源
+      apply(t.dep, 'trace-dep');       // 引用该公式的下游公式格
+    } else if (cur && cur.kind === 'input') {
+      apply(t.dep, 'trace-dep');       // 该输入被哪些公式(直接/间接)使用 → 结果格
+    }
   }
   function commitFx() {
     const inputEl = $('#fx-input');
@@ -651,6 +729,7 @@
     gridEval();
     paintAll(gridCache);
     updateFxBar();
+    paintTrace(document.getElementById('view-editor')); // 公式/取值变化后刷新影响链
   }
   function clearGridOverrides(msg) {
     gridOverF = {};
