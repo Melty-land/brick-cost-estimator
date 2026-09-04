@@ -23,6 +23,7 @@
       <span class="user-area" id="user-area" hidden>
         <span id="user-badge"></span>
         <button id="btn-logout">退出</button>
+        <button id="btn-shutdown" class="danger-ghost">退出系统</button>
       </span>
     </nav>
     <div class="sysbar">
@@ -55,6 +56,14 @@
       </form>
       <p class="auth-switch" id="auth-switch">没有账号?<a href="#" id="auth-toggle">注册一个</a></p>
       <p class="auth-note">首个注册账号自动成为管理员;其余注册为普通用户。</p>
+    </div>
+  </div>
+
+  <!-- 退出系统:服务已停止提示层 -->
+  <div id="shutdown-screen" hidden>
+    <div class="auth-card">
+      <h2>系统已退出</h2>
+      <p class="auth-sub">本地服务已停止。可关闭本页;再次使用请双击「启动.bat」重新启动。</p>
     </div>
   </div>
 

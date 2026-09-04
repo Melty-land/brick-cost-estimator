@@ -104,16 +104,16 @@ async function main() {
   // 切到 e1 进行数值断言
   await evalJS(`location.hash = '#estimate/e1'`);
   const onE1 = await waitFor(`(() => {
-    const el = document.querySelector('td[data-addr="J28"]');
+    const el = document.querySelector('td[data-addr="G28"]');
     return !!el && el.textContent === '9980';
   })()`);
   if (!onE1) { console.error('✗ 未切换到 e1'); process.exit(1); }
-  console.log('✓ 已切到 e1(J28=9980)');
+  console.log('✓ 已切到 e1(G28=9980)');
 
   // ---- 1. 初始计算值(与原始 Excel 坐标一致) ----
   const checks = [
     ['C6', '500'], ['E6', '100,000'], ['B13', '150,800'], ['F6', '20.04%'],
-    ['J28', '9980'], ['K28', '2,428,000'], ['B34', '2,428,000'], ['H34', '2,428,000'], ['H33', '5']
+    ['G28', '9980'], ['I28', '2,428,000'], ['B34', '2,428,000'], ['H34', '2,428,000'], ['H33', '5']
   ];
   for (const [addr, expect] of checks) {
     const txt = await cellText(addr);
@@ -164,10 +164,10 @@ async function main() {
   console.log('✓ 全部还原:C6=500,E6=100,000,成本总价①=2,428,000');
 
   // ---- 8. 百分比展示(占比=每锅×锅数占总材料用量的比例,与清单占比一致) ----
-  if ((await cellText('F6')) !== '20.04%' || (await cellText('L17')) !== '20.04%') {
+  if ((await cellText('F6')) !== '20.04%' || (await cellText('K17')) !== '20.04%') {
     console.error('✗ 占比百分比显示异常'); process.exit(1);
   }
-  console.log('✓ 占比列按百分比显示(跨区按每锅×锅数):F6=20.04%(=L17)');
+  console.log('✓ 占比列按百分比显示(跨区按每锅×锅数):F6=20.04%(=K17)');
 
   // ---- 9. 错误值显示(分母为零) ----
   await setFx('D6', '0');

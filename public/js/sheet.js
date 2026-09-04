@@ -198,12 +198,22 @@
     place(r, 7, fx(7, r, '=SUM(K' + zoneStart + ':K' + (zoneStart + Math.max(tCount, 1) - 1) + ')', 5));
 
     // ===== 材料清单(单位:公斤) =====
+    // 版式(用户确认):删除用不到的 单价/数量(公斤)/金额 三列,保留 9 列并以 colspan 铺满 12 格宽:
+    //   A序号 | B材料名称 | C上存材料 | D本期进料 | E库存材料 | F本期用料单价 |
+    //   G-H本期用料数量(公斤) | I-J本期用料金額 | K-L占比
     r = addRow(); // 空行
     r = addRow();
     place(r, 0, lab(0, r, '材料清单(单位:公斤)', 'sech', 12));
     r = addRow();
-    var listCols = ['序号', '材料名称', '上存材料(公斤)', '本期进料(公斤)', '库存材料(公斤)', '单价', '数量(公斤)', '金额', '本期用料单价', '本期用料数量(公斤)', '本期用料金額', '占比'];
-    listCols.forEach(function (h, i) { place(r, i, lab(i, r, h, 'hdr', 1)); });
+    var listHeads = [
+      { t: '序号', c: 0, s: 1 }, { t: '材料名称', c: 1, s: 1 },
+      { t: '上存材料(公斤)', c: 2, s: 1 }, { t: '本期进料(公斤)', c: 3, s: 1 }, { t: '库存材料(公斤)', c: 4, s: 1 },
+      { t: '本期用料单价', c: 5, s: 1 },
+      { t: '本期用料数量(公斤)', c: 6, s: 2 },
+      { t: '本期用料金額', c: 8, s: 2 },
+      { t: '占比', c: 10, s: 2 }
+    ];
+    listHeads.forEach(function (h) { place(r, h.c, lab(h.c, r, h.t, 'hdr', h.s)); });
 
     var list = bottom.concat(top);
     var listStart = r + 1;
@@ -214,29 +224,29 @@
       r = addRow();
       var isBottom = item.r.zone !== '面料';
       var zr2 = zoneStart + (isBottom ? bottom.indexOf(item) : top.indexOf(item));
-      var qtyCol = isBottom ? 'D' : 'J';
-      var potCol = isBottom ? 'B' : 'H';
+      var qtyCol = isBottom ? 'D' : 'J';     // 配比区数量列(底料 D/面料 J)
+      var potCol = isBottom ? 'B' : 'H';     // 锅数行(底料 B/面料 H)
       place(r, 0, lab(0, r, String(li + 1), 'seq', 1));
       place(r, 1, lab(1, r, item.r.name, 'mat', 1));
       place(r, 2, inp(2, r, 'rows.' + item.i + '.stockOnHand', numOrBlank(item.r.stockOnHand), 'num', 1));
       place(r, 3, inp(3, r, 'rows.' + item.i + '.stockIn', numOrBlank(item.r.stockIn), 'num', 1));
-      place(r, 4, fx(4, r, '=C' + r + '+D' + r, 1));
-      place(r, 5, fx(5, r, '=' + (isBottom ? 'C' : 'I') + zr2, 1));
-      place(r, 6, inp(6, r, 'rows.' + item.i + '.qty', numOrBlank(item.r.qty), 'num', 1));
-      place(r, 7, fx(7, r, '=F' + r + '*G' + r, 1));
-      place(r, 8, fx(8, r, '=F' + r, 1));
-      place(r, 9, fx(9, r, '=' + qtyCol + zr2 + '*$' + potCol + potRow, 1));  // 本期用料数量(公斤)=配比×锅数,不换算
-      place(r, 10, fx(10, r, '=I' + r + '*J' + r, 1));
-      place(r, 11, fx(11, r, '=IF(J' + r + '=0,0,J' + r + '/$J$' + listSumRow + ')', 1, true));
+      place(r, 4, fx(4, r, '=C' + r + '+D' + r, 1));                       // 库存材料 = 上存 + 进料
+      place(r, 5, fx(5, r, '=' + (isBottom ? 'C' : 'I') + zr2, 1));        // 本期用料单价 = 配比单价
+      place(r, 6, fx(6, r, '=' + qtyCol + zr2 + '*$' + potCol + '$' + potRow, 2)); // 本期用料数量(公斤) = 每锅×锅数
+      place(r, 8, fx(8, r, '=F' + r + '*G' + r, 2));                       // 本期用料金額 = 单价×数量
+      place(r, 10, fx(10, r, '=IF(G' + r + '=0,0,G' + r + '/$G$' + (listSumRow || listStart) + ')', 2, true)); // 占比按使用数量
     });
 
-    // ===== 材料清单合计行 =====
+    // ===== 材料清单合计行(序号+名称跨 2 格;库存/数量/金額合计;占比列留空) =====
     if (list.length) {
       r = addRow();
       place(r, 0, lab(0, r, '合计', 'lab', 2));
-      var sumCols = [2, 3, 4, 6, 7, 9, 10, 11];
-      sumCols.forEach(function (c) {
-        place(r, c, fx(c, r, '=SUM(' + COLS[c] + listStart + ':' + COLS[c] + listEnd + ')', 1));
+      var sumHeads = [
+        { c: 2 }, { c: 3 }, { c: 4 },      // 上存 / 本期进料 / 库存材料
+        { c: 6, s: 2 }, { c: 8, s: 2 }     // 本期用料数量 / 本期用料金額
+      ];
+      sumHeads.forEach(function (sh) {
+        place(r, sh.c, fx(sh.c, r, '=SUM(' + COLS[sh.c] + listStart + ':' + COLS[sh.c] + listEnd + ')', sh.s || 1));
       });
     }
 
@@ -276,13 +286,13 @@
     place(r, 9, fx(9, r, '=IF(F' + R2 + '=0,"",IF(H' + R2 + '="","",H' + R2 + '/F' + R2 + '))', 1, true, 'calc.yieldRate'));
     place(r, 10, lab(10, r, '材料吨价(元/吨)', 'lab', 1));
     // 材料吨价 = 本期用料金额合计 ÷ 本期用料数量合计 × 1000(元/吨;单价按元/kg 录入,乘 1000 换算为吨价)
-    place(r, 11, fx(11, r, '=IF(J' + (listSumRow || listStart) + '=0,"",K' + (listSumRow || listStart) + '/J' + (listSumRow || listStart) + '*1000)', 1, false, 'calc.tonPrice'));
+    place(r, 11, fx(11, r, '=IF(G' + (listSumRow || listStart) + '=0,"",I' + (listSumRow || listStart) + '/G' + (listSumRow || listStart) + '*1000)', 1, false, 'calc.tonPrice'));
 
     var R3 = r + 1;
     r = addRow();
     // 每平方价 = 本期用料金额合计 ÷ 实际数(实际数为空则用计划数)(自动)
     place(r, 0, lab(0, r, '每平方价', 'lab', 1));
-    place(r, 1, fx(1, r, '=IF(H' + R2 + '="",IF(F' + R2 + '=0,"",K' + (listSumRow || listStart) + '/F' + R2 + '),K' + (listSumRow || listStart) + '/H' + R2 + ')', 1, false, 'calc.perSqmPrice'));
+    place(r, 1, fx(1, r, '=IF(H' + R2 + '="",IF(F' + R2 + '=0,"",I' + (listSumRow || listStart) + '/F' + R2 + '),I' + (listSumRow || listStart) + '/H' + R2 + ')', 1, false, 'calc.perSqmPrice'));
     place(r, 2, lab(2, r, '始模', 'lab', 1));
     place(r, 3, inp(3, r, 'calc.startMold', numOrBlank(getByPath(est, 'calc.startMold')), 'num', 1));
     place(r, 4, lab(4, r, '止模', 'lab', 1));
@@ -293,10 +303,10 @@
     var R4 = r + 1;
     r = addRow();
     place(r, 0, lab(0, r, '成本总价①(本期用料金额合计)', 'lab', 1));
-    place(r, 1, fx(1, r, '=K' + (listSumRow || listStart), 5));
+    place(r, 1, fx(1, r, '=I' + (listSumRow || listStart), 5));
     place(r, 6, lab(6, r, '成本总价②(材料吨价×用料总量·吨)', 'lab', 1));
     // ② = 材料吨价(元/吨) × 用料总量(吨 = 公斤/1000);默认与 ① 一致(交叉复核)
-    place(r, 7, fx(7, r, '=L' + R2 + '*J' + (listSumRow || listStart) + '/1000', 5));
+    place(r, 7, fx(7, r, '=L' + R2 + '*G' + (listSumRow || listStart) + '/1000', 5));
 
     var maxRow = r;
 

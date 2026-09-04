@@ -1596,7 +1596,36 @@
         toast('已退出登录');
       });
     }
+    // 退出系统:停止本地服务(需重新双击 启动.bat 才能再用)
+    if (e.target.closest('#btn-shutdown')) {
+      showConfirm('确认退出系统?',
+        '点击「确认退出」将停止本地服务并关闭页面,之后需要重新双击「启动.bat」才能再次使用本系统。\n\n未保存的编辑会自动存为本机草稿,下次打开可恢复。确定退出吗?',
+        function () { shutdownSystem(); }, null);
+    }
   });
+
+  /** 停止服务并进入"已退出"提示页 */
+  function shutdownSystem() {
+    const finish = function () {
+      const tip = document.getElementById('shutdown-screen');
+      if (tip) {
+        tip.hidden = false;
+        document.querySelectorAll('.view, #auth-screen, .app-header').forEach(function (el) { if (el) el.style.display = 'none'; });
+        const m = document.getElementById('toast'); if (m) m.hidden = true;
+      }
+      // 尝试关闭标签页(多数浏览器仅允许关闭脚本打开的窗口;被拒则用户看到提示页后手动关)
+      setTimeout(function () { try { window.close(); } catch (e) { /* 忽略 */ } }, 200);
+    };
+    if (Store.token) {
+      fetch('/api/system/shutdown', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + Store.token }
+      }).then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (j) { if (j && j.ok) { finish(); } else { toast('退出系统失败,请稍后重试'); } })
+        .catch(function () { toast('无法连接服务,可能已停止'); finish(); });
+    } else {
+      toast('未登录,无需退出系统');
+    }
+  }
 
   // ---------- 表格编辑器交互(单元格选择 / 公式栏回车 / Esc 还原) ----------
   document.addEventListener('click', function (e) {

@@ -92,11 +92,12 @@ body.editor-wide main { max-width: 1620px; }
 #user-badge { color: #c7c7cc; font-size: 13px; }
 #btn-logout { background: transparent; border: 1px solid rgba(255, 255, 255, .3); color: #f5f5f7; padding: 3px 14px; border-radius: 980px; }
 #btn-logout:hover { background: rgba(255, 255, 255, .15); }
+#btn-shutdown.danger-ghost { background: transparent; border: 1px solid rgba(255, 59, 48, .55); color: #ff6b60; padding: 3px 14px; border-radius: 980px; }
+#btn-shutdown.danger-ghost:hover { background: rgba(255, 59, 48, .15); }
 
 /* ================= 登录 / 注册(iOS 卡片) ================= */
 #auth-screen {
-  position: fixed; inset: 0; z-index: 500;
-  background: rgba(245, 245, 247, .96);
+  position: fixed; inset: 0; z-index: 500;  background: rgba(245, 245, 247, .96);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
   display: flex; align-items: center; justify-content: center;
@@ -126,6 +127,18 @@ body.editor-wide main { max-width: 1620px; }
 .auth-switch a { color: var(--primary); text-decoration: none; font-weight: 500; }
 .auth-switch a:hover { text-decoration: underline; }
 .auth-note { text-align: center; color: var(--text-3); font-size: 12px; margin-top: 10px; }
+
+/* ---- 退出系统提示层 ---- */
+#shutdown-screen {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(245, 245, 247, .96);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  display: flex; align-items: center; justify-content: center;
+}
+#shutdown-screen .auth-card { text-align: center; }
+#shutdown-screen .auth-sub { margin-bottom: 0; }
+#shutdown-screen h2 { color: var(--danger); }
 
 /* ================= 主视图(iOS grouped 卡片) ================= */
 .view {

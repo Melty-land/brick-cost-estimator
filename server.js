@@ -692,6 +692,19 @@ const server = http.createServer(async function (req, res) {
       return;
     }
 
+    // ---- 系统:退出(需登录;停止本地服务,需重新运行 启动.bat / node server.js 恢复) ----
+    if (p === '/api/system/shutdown' && req.method === 'POST') {
+      if (!requireAuth(req, res)) return;
+      console.log('收到退出系统请求,服务即将停止。');
+      sendJson(res, 200, { ok: true });
+      // 稍后关闭:先让本响应发出去,再停止接收新连接并退出进程
+      setTimeout(function () {
+        try { server.close(); } catch (e) { /* ignore */ }
+        setTimeout(function () { process.exit(0); }, 100);
+      }, 300);
+      return;
+    }
+
     // ---- 静态资源 ----
     serveStatic(req, res, p);
   } catch (e) {

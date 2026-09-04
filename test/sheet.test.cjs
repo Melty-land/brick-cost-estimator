@@ -38,20 +38,20 @@ for (const e of data.estimates) {
   near(V['F' + res.sheet.meta.zoneStart], black.ratio, 1e-9);
   near(V['L' + res.sheet.meta.zoneStart], white.ratio, 1e-9);
 
-  // 材料清单:库存/金额/单价联动/本期用料数量/金额/占比
-  near(V['E' + m.listStart], black.stock, 1e-9);
-  near(V['H' + m.listStart], black.amount, 1e-9);
-  near(V['I' + m.listStart], black.price, 1e-9);
-  near(V['J' + m.listStart], black.usageTon, 1e-9);
-  near(V['K' + m.listStart], black.usageAmount, 1e-9);
-  near(V['L' + m.listStart], black.ratio, 1e-9);
+  // 材料清单(版式 2026-09 修订:删 单价/数量(公斤)/金额 三列,剩余 9 列铺满 12 格):
+  //   A序号|B名称|C上存|D本期进料|E库存材料|F本期用料单价|G-H本期用料数量(公斤)|I-J本期用料金額|K-L占比
+  near(V['E' + m.listStart], black.stock, 1e-9);          // 库存材料 = 上存 + 进料
+  near(V['F' + m.listStart], black.price, 1e-9);          // 本期用料单价 = 单价
+  near(V['G' + m.listStart], black.usageTon, 1e-9);       // 本期用料数量(公斤)= 每锅×锅数
+  near(V['I' + m.listStart], black.usageAmount, 1e-9);    // 本期用料金額
+  near(V['K' + m.listStart], black.ratio, 1e-9);          // 占比
   // 面料第一行:白水泥
   const wlIdx = m.listStart + c.bottom.rows.length; // 底料在前
-  near(V['J' + wlIdx], white.usageTon, 1e-9);
-  near(V['K' + wlIdx], white.usageAmount, 1e-9);
+  near(V['G' + wlIdx], white.usageTon, 1e-9);
+  near(V['I' + wlIdx], white.usageAmount, 1e-9);
   // 合计行
-  near(V['J' + m.listSumRow], c.listTotals.usageTon, 1e-9);
-  near(V['K' + m.listSumRow], c.listTotals.usageAmount, 1e-9);
+  near(V['G' + m.listSumRow], c.listTotals.usageTon, 1e-9);
+  near(V['I' + m.listSumRow], c.listTotals.usageAmount, 1e-9);
 
   // 成本核算:模数 & 成本总价①②(模数公式格位于 H 列)
   near(V['H' + m.R3], c.calc.mold, 1e-9);
@@ -71,7 +71,7 @@ for (const e of data.estimates) {
   assert.strictEqual(V['J' + m.R2], '');        // 实际数为空 -> 成品率空
 
   console.log('✓ ' + e.id + ' 网格默认公式与 CostCalc 完全一致(底料合计 ' + V['B' + m.sumRow].toFixed(2) +
-    ' / 面料 ' + V['H' + m.sumRow].toFixed(2) + ' / 用量 ' + V['J' + m.listSumRow].toFixed(2) +
+    ' / 面料 ' + V['H' + m.sumRow].toFixed(2) + ' / 用量 ' + V['G' + m.listSumRow].toFixed(2) +
     ' 公斤 / ①' + V['B' + m.R4].toFixed(2) + ' / ②' + V['H' + m.R4].toFixed(2) + ' / 模数 ' + V['H' + m.R3] + ')');
 }
 

@@ -90,7 +90,7 @@ async function main() {
   console.log('✓ 估算单(e1)表格编辑器已打开');
 
   // ---- 1. 初始值 ----
-  const init = [['B34', '2,428,000'], ['H34', '2,428,000'], ['H33', '5'], ['K17', '1,000,000'], ['E6', '100,000']];
+  const init = [['B34', '2,428,000'], ['H34', '2,428,000'], ['H33', '5'], ['I17', '1,000,000'], ['E6', '100,000']];
   for (const [a, e] of init) {
     const t = await cellText(a);
     if (t !== e) { console.error(`✗ 初始 ${a} 应为 ${e},实得 ${t}`); process.exit(1); }
@@ -100,7 +100,7 @@ async function main() {
   // ---- 2. 单价联动:C6 500->600 ----
   await setFx('C6', '600');
   const v = {
-    e5: await cellText('E6'), k16: await cellText('K17'),
+    e5: await cellText('E6'), k16: await cellText('I17'),
     b33: await cellText('B34'), h33: await cellText('H34'), f16: await cellText('F17')
   };
   if (v.e5 !== '120,000' || v.k16 !== '1,200,000' || v.b33 !== '2,628,000' || v.h33 !== '2,628,000' || v.f16 !== '600') {
@@ -110,7 +110,7 @@ async function main() {
 
   // ---- 3. 锅数联动:B12(底料锅数) 10->15 ----
   await setFx('B12', '15');
-  const v2 = { j16: await cellText('J17'), b33: await cellText('B34'), h33: await cellText('H34'), j27: await cellText('J28') };
+  const v2 = { j16: await cellText('G17'), b33: await cellText('B34'), h33: await cellText('H34'), j27: await cellText('G28') };
   if (v2.j16 !== '3000' || v2.b33 !== '3,482,000' || v2.h33 !== '3,482,000' || v2.j27 !== '14,130') {
     console.error('✗ 锅数联动失败:' + JSON.stringify(v2)); process.exit(1);
   }

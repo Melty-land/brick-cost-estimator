@@ -178,9 +178,9 @@ async function main() {
     await sleep(300);
   };
   await setFxCell('B7', 20);
-  const usageTon = await evalJS(`document.querySelector('td[data-addr="J12"]').textContent`);
+  const usageTon = await evalJS(`document.querySelector('td[data-addr="G12"]').textContent`);
   if (usageTon !== '5000') { console.error('✗ 新估算单联动失败: ' + usageTon); process.exit(1); }
-  console.log('✓ 新估算单联动:黑水泥 250kg×20锅 = 5000 公斤(J12)');
+  console.log('✓ 新估算单联动:黑水泥 250kg×20锅 = 5000 公斤(G12)');
   // 未填完必填项(单价=0、编制人等),只能保存为草稿
   await click('[data-action="editor-save-draft"]');
   await sleep(800);
