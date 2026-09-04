@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 .e2e/
 .e2e2/
 .e2e3/
@@ -20,3 +20,10 @@ data/userdata-restored.json
 data/.userdata-cache.json
 data/.pre-*
 data/.*-regress-*
+
+# 与运行无关的过程性文档/截图(已移出仓库,保留本地)
+差距与落地清单.md
+数据库与备份方案.md
+登录注册方案.md
+界面优化方案.md
+P0演示-iOS风格/
