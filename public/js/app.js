@@ -306,11 +306,12 @@
   }
 
   // ---------- 成本总览 / 图表共用筛选(时间段+砖型多选+材料多选) ----------
-  /** 估算单展示名(砖型/型号):优先取关联产品名,否则取估算单 name */
+  /** 砖型/型号名:优先取关联产品名(同砖型多批聚为一种),产品不存在时回落估算单名称 */
   function estTypeName(e) {
-    if (e && e.name) return String(e.name);
     const p = e && e.productId ? data.products.find(function (x) { return x.id === e.productId; }) : null;
-    return p && p.name ? String(p.name) : (e.code || '未命名');
+    if (p && p.name) return String(p.name);
+    if (e && e.name) return String(e.name);
+    return (e && e.code) || '未命名';
   }
   /** 全部可筛选型号(按估算单 name 去重,保序) */
   function allTypes() {
@@ -1476,7 +1477,7 @@
         '<div class="chart-card">' +
           '<div class="chart-head"><h3>' + esc(donutTitle) + '</h3>' +
             '<span class="chart-note">全部筛选批次按材料汇总</span></div>' +
-          (donutTotal > 0 ? Charts.donutHTML(donutItems, donutTotal, null) : '<p class="empty-hint">当前筛选下无数据</p>') +
+          (donutTotal > 0 ? Charts.donutHTML(donutItems, donutTotal, null, isKg ? '合计用料(公斤)' : '合计金额(元)', isKg) : '<p class="empty-hint">当前筛选下无数据</p>') +
         '</div>' +
         '<div class="chart-card">' +
           '<div class="chart-head"><h3>' + (isKg ? '批次用料对比(公斤)' : '批次成本总价对比') + '</h3>' +

@@ -55,37 +55,52 @@
    * @param total 中心合计
    * @param estId 点击段跳转用
    */
-  function donutHTML(items, total, estId) {
+  function donutHTML(items, total, estId, unitCaption, isKg) {
     var r = 84, sw = 34;
     var C = 2 * Math.PI * r;
+    var cap = unitCaption || '合计金额(元)';
+    var kg = !!isKg;
+    var fmtV = kg ? fmtKg : fmtFull;   // 图例数值:公斤无 ¥,金额带 ¥
+    var fmtT = kg ? fmtKg : fmtC;      // 中心合计
     var valid = (items || []).filter(function (it) { return num(it.value) > 0; });
     var sum = valid.reduce(function (s, it) { return s + num(it.value); }, 0);
     if (sum <= 0) return '<div class="empty-hint">该批次暂无用料金额数据</div>';
 
     var segs = '', offset = 0;
-    valid.forEach(function (it, i) {
-      var len = num(it.value) / sum * C;
+    // 极小区段(占比 < 0.2%,周长 < ~1px)若单独成弧会造成负 dasharray → 渲染异常盖色。
+    // 将其并入「其它」段仍显示在图例,但不画独立弧。
+    var MIN_FRAC = 0.002;
+    var big = valid.filter(function (it) { return num(it.value) / sum >= MIN_FRAC; });
+    var smallSum = valid.reduce(function (s, it) {
+      return s + (num(it.value) / sum < MIN_FRAC ? num(it.value) : 0);
+    }, 0);
+    if (smallSum > 0) big.push({ name: '其它', value: smallSum });
+    var drawTotal = big.reduce(function (s, it) { return s + num(it.value); }, 0);
+    big.forEach(function (it, i) {
+      var len = num(it.value) / drawTotal * C;
+      var dash = Math.max(len - 1, 0.5);        // 至少 0.5px 可见;不会为负
+      var rest = Math.max(C - dash, 0);
       segs += '<circle cx="110" cy="110" r="' + r + '" fill="none" stroke="' + PALETTE[i % PALETTE.length] +
-        '" stroke-width="' + sw + '" stroke-dasharray="' + (len - 1) + ' ' + (C - len + 1) + '"' +
+        '" stroke-width="' + sw + '" stroke-dasharray="' + dash + ' ' + rest + '"' +
         ' stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 110 110)" class="donut-seg"' +
         (estId ? ' data-chart-open="' + estId + '"' : '') + '></circle>';
       offset += len;
     });
 
-    var legend = valid.map(function (it, i) {
+    var legend = big.map(function (it, i) {
       return '<div class="chart-legend-item">' +
         '<span class="swatch" style="background:' + PALETTE[i % PALETTE.length] + '"></span>' +
         '<span class="l-name">' + esc(it.name) + '</span>' +
-        '<span class="l-val">' + fmtFull(it.value) + '</span>' +
-        '<span class="l-pct">' + (num(it.value) / sum * 100).toFixed(1) + '%</span></div>';
+        '<span class="l-val">' + fmtV(it.value) + (kg ? ' 公斤' : '') + '</span>' +
+        '<span class="l-pct">' + (num(it.value) / sum * 100).toFixed(2) + '%</span></div>';
     }).join('');
 
     return '<div class="chart-wrap">' +
       '<svg viewBox="0 0 220 220" class="chart-svg donut-svg">' +
         '<circle cx="110" cy="110" r="' + r + '" fill="none" stroke="#e6e9ee" stroke-width="' + sw + '"></circle>' +
         segs +
-        '<text x="110" y="104" text-anchor="middle" class="donut-total">' + fmtC(total) + '</text>' +
-        '<text x="110" y="123" text-anchor="middle" class="donut-cap">合计金额(元)</text>' +
+        '<text x="110" y="104" text-anchor="middle" class="donut-total">' + fmtT(total) + '</text>' +
+        '<text x="110" y="123" text-anchor="middle" class="donut-cap">' + cap + '</text>' +
       '</svg>' +
       '<div class="chart-legend">' + legend + '</div></div>';
   }
