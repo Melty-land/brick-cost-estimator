@@ -20,6 +20,12 @@
   let lastMatMode = null;          // 上次渲染时的汇总模式
   let estDateFrom = '';            // 估算单列表日期筛选:开始日期(YYYY-MM-DD,空=不限)
   let estDateTo = '';              // 估算单列表日期筛选:结束日期(空=不限)
+  // ---- 成本总揽 / 图表预览 共用筛选(2026-09)----
+  let ovlFrom = '';                // 时间段:开始日期(含)
+  let ovlTo = '';                  // 时间段:结束日期(含)
+  let ovlTypes = [];               // 砖型(型号/名称)多选:空=全部
+  let ovlMats = [];                // 材料名称多选:空=全部
+  let ovlCur = 'overview';         // 当前筛选所属页(overview|charts),用于互相跳转时带同一筛选
   // ---- 表格编辑器(Excel 化)状态 ----
   let gridOverF = {};              // 单元格公式覆盖 {addr: '=...'}
   let gridOverV = {};              // 单元格静态覆盖 {addr: 文本}
@@ -138,6 +144,7 @@
     else if (name === 'products') renderProducts();
     else if (name === 'estimates') renderEstimates();
     else if (name === 'charts') renderCharts();
+    else if (name === 'overview') renderOverview();
     else if (name === 'compare') renderCompare();
     else if (name === 'users') renderUsers();
   }
@@ -168,8 +175,26 @@
     if (name === 'estimate' && id) { openEstimateEditor(id); return; }
     if (name === 'new-estimate') { openEstimateEditor(null, id); return; }
     if (name === 'editor') { estDraft = null; location.hash = '#estimates'; return; }
-    if (name === 'materials' || name === 'products' || name === 'estimates' || name === 'charts' || name === 'compare' || name === 'users') {
+    if (name === 'materials' || name === 'products' || name === 'estimates' || name === 'charts' || name === 'overview' || name === 'compare' || name === 'users') {
       switchView(name);
+      return;
+    }
+    // 成本总揽/图表 跨页跳转(同源新窗口带筛选):#ovl-charts / #ovl-overview
+    if (name === 'ovl-charts' || name === 'ovl-overview') {
+      const target = name === 'ovl-charts' ? 'charts' : 'overview';
+      try {
+        const raw = sessionStorage.getItem('ovlFilter');
+        if (raw) {
+          const f = JSON.parse(raw);
+          ovlFrom = f.from || ''; ovlTo = f.to || '';
+          ovlTypes = Array.isArray(f.types) ? f.types : [];
+          ovlMats = Array.isArray(f.mats) ? f.mats : [];
+          sessionStorage.removeItem('ovlFilter');
+        }
+      } catch (e) { /* 忽略 */ }
+      ovlCur = target;
+      if (target === 'charts') { lastChartsSig = null; }
+      location.hash = '#' + target; // 规整为常规 hash,再渲染目标视图
       return;
     }
     switchView('materials');
@@ -280,6 +305,74 @@
     return !(s2 < f1 || s1 > f2);
   }
 
+  // ---------- 成本总揽 / 图表共用筛选(时间段+砖型多选+材料多选) ----------
+  /** 估算单展示名(砖型/型号):优先取关联产品名,否则取估算单 name */
+  function estTypeName(e) {
+    if (e && e.name) return String(e.name);
+    const p = e && e.productId ? data.products.find(function (x) { return x.id === e.productId; }) : null;
+    return p && p.name ? String(p.name) : (e.code || '未命名');
+  }
+  /** 全部可筛选型号(按估算单 name 去重,保序) */
+  function allTypes() {
+    const seen = {}, out = [];
+    (data.estimates || []).forEach(function (e) {
+      const t = estTypeName(e);
+      if (!seen[t]) { seen[t] = 1; out.push(t); }
+    });
+    return out;
+  }
+  /** 全部可筛选材料(材料库 + 估算单内引用,按名去重) */
+  function allMatNames() {
+    const seen = {}, out = [];
+    (data.materials || []).forEach(function (m) { if (!seen[m.name]) { seen[m.name] = 1; out.push(m.name); } });
+    (data.estimates || []).forEach(function (e) {
+      (e.rows || []).forEach(function (r) { if (r.name && !seen[r.name]) { seen[r.name] = 1; out.push(r.name); } });
+    });
+    return out;
+  }
+  /** 总揽/图表筛选:时间段 + 砖型限制批次集;材料多选只过滤材料维度内容(见 matAggregate/donut 等) */
+  function ovlFiltered(list) {
+    list = list || data.estimates || [];
+    return list.filter(function (e) {
+      if (!estInRange(e, ovlFrom, ovlTo)) return false;
+      if (ovlTypes.length && ovlTypes.indexOf(estTypeName(e)) < 0) return false;
+      return true;
+    });
+  }
+  /** 当前筛选下计算每个估算单的 CostCalc 结果 */
+  function ovlComps() {
+    return ovlFiltered().map(function (e) { return { e: e, c: CostCalc.compute(e) }; });
+  }
+  /** 型号维度聚合:每型号 → {批次, cost1(成本总价①合计), 平均成本, 用料公斤} */
+  function typeAggregate(comps) {
+    const map = new Map();
+    comps.forEach(function (x) {
+      const t = estTypeName(x.e);
+      if (!map.has(t)) map.set(t, { type: t, n: 0, cost: 0, kg: 0 });
+      const o = map.get(t);
+      o.n++;
+      o.cost += isFinite(x.c.calc.costTotal1) ? x.c.calc.costTotal1 : 0;
+      o.kg += isFinite(x.c.listTotals.usageKg) ? x.c.listTotals.usageKg : 0;
+    });
+    const rows = Array.from(map.values());
+    rows.forEach(function (o) { o.avg = o.n ? o.cost / o.n : 0; });
+    return rows;
+  }
+  /** 材料维度聚合:每材料 → 用量公斤 / 金额 */
+  function matAggregate(comps) {
+    const map = new Map();
+    comps.forEach(function (x) {
+      x.c.rows.forEach(function (r) {
+        if (ovlMats.length && ovlMats.indexOf(r.name) < 0) return;
+        if (!map.has(r.name)) map.set(r.name, { name: r.name, kg: 0, amount: 0 });
+        const o = map.get(r.name);
+        o.kg += r.usageKg;
+        o.amount += r.usageAmount;
+      });
+    });
+    return Array.from(map.values());
+  }
+
   function renderEstimates() {
     const v = $('#view-estimates');
     const prodOpts = data.products.map(function (p) {
@@ -378,6 +471,75 @@
   }
 
   // ---------- 估算单编辑器 ----------
+  /**
+   * 同预算表编号(code)中"上一个"批次:取开始日期早于本单且最近的一个(同 code、排除自身)。
+   * 排序规则:startDate 升序;同日期按 id 升序,取最后一个仍早于本单的。
+   */
+  function prevBatchOf(code, curId) {
+    if (!code) return null;
+    const same = data.estimates.filter(function (e) {
+      return e.id !== curId && e.code === code;
+    }).sort(function (a, b) {
+      const da = a.startDate || '', db = b.startDate || '';
+      if (da !== db) return da < db ? -1 : 1;
+      return a.id < b.id ? -1 : 1;
+    });
+    if (!same.length) return null;
+    const curDate = (function () {
+      const self = data.estimates.find(function (e) { return e.id === curId; });
+      return self ? (self.startDate || '') : '';
+    })();
+    // 取开始日期不晚于本单的最后一个;本单无日期时取最近一个
+    let prev = null;
+    for (let i = 0; i < same.length; i++) {
+      if (curDate && (same[i].startDate || '') > curDate) break;
+      prev = same[i];
+    }
+    if (!prev && same.length) prev = same[same.length - 1];
+    return prev;
+  }
+
+  /** 上一批次的材料库存表:{材料名 -> 期末库存公斤(上存+进料-本期用料)} */
+  function prevStockMap(prevEst) {
+    const out = {};
+    if (!prevEst) return out;
+    CostCalc.compute(prevEst).rows.forEach(function (r) {
+      out[r.name] = r.stock; // calc.rows[].stock = 上存+本期进料-本期用料数量(公斤)
+    });
+    return out;
+  }
+
+  /** 上存材料跨批提示 HTML:同编号有上一批且材料名匹配时,提示建议上存(=上一批库存),一键填入 */
+  function prevStockHTML(d, sheet) {
+    if (!d || !d.code || !d.rows.length) return '';
+    const prev = prevBatchOf(d.code, d.id);
+    if (!prev) return '';
+    const prevStock = prevStockMap(prev);
+    // 本单材料清单里可编辑"上存材料"的行:按 name 匹配(材料清单含全部 rows)
+    const hints = d.rows.map(function (r) {
+      const ref = prevStock[r.name];
+      if (ref === undefined) return null;      // 上一批没有该材料
+      const curVal = (r.stockOnHand === '' || r.stockOnHand === null || r.stockOnHand === undefined) ? null : Number(r.stockOnHand);
+      const differs = curVal === null || Math.abs(curVal - ref) > 1e-9;
+      return { name: r.name, ref: ref, cur: curVal };
+    }).filter(Boolean);
+    if (!hints.length) return '';
+    // 有差异才提示(全一致则不需要打扰)
+    const differsAll = hints.filter(function (h) { return h.cur === null || Math.abs(h.cur - h.ref) > 1e-9; });
+    if (!differsAll.length) return '';
+    const chips = differsAll.map(function (h) {
+      return '<span class="chip"><b>' + esc(h.name) + '</b>上一批库存 ' + fmt(h.ref, 2) + ' kg' +
+        (h.cur !== null ? '(当前 ' + fmt(h.cur, 2) + ')' : '(未填)') + '</span>';
+    }).join(' ');
+    return '<div class="stock-prev-hint">' +
+      '<span class="ic-wrap">' + icon('calendar', 16) + '</span>' +
+      '<span>检测到同编号上一批次「' + esc(prev.code || '') + '」(' + esc(prev.startDate || '无日期') + ')。' +
+      '按口径「上存材料 = 上一编号的库存材料(上存+进料-本期用料)」,以下材料可参考:&nbsp;</span>' +
+      chips +
+      '<button class="small primary" data-action="apply-prev-stock" title="把上述上存材料统一改为上一批库存值">' + btnIcon('download', '一键填入') + '</button>' +
+      '</div>';
+  }
+
   function newEstimateDraft(productId) {
     const p = productId ? data.products.find(function (x) { return x.id === productId; }) : null;
     const rows = p ? p.recipe.map(function (r) {
@@ -469,6 +631,7 @@
       '<div class="required-bar" id="editor-required-bar"></div>' +
       '<div class="sheet-hint">版式与《砖成本材料预算表_黑白打印版.xlsx》一致 · ' +
         '灰底=说明 · 白底=输入格 · 蓝底=公式格 · <b style="color:#a06700">黄底=必填待填写</b>;退出编辑时会弹窗选择保存方式。</div>' +
+      prevStockHTML(d, sheet) +
       '<div class="sheet-scroll">' + gridTableHTML(sheet) + '</div>' +
       '<div class="list-actions">' +
         '<select id="editor-add-mat">' + (addOpts || '<option value="">无可用材料</option>') + '</select>' +
@@ -1035,6 +1198,108 @@
     if (kind === 'ready') { saveEstimate('ready', false, target); return; }
   }
 
+  // ---------- 成本总揽(跨批次汇总:时间段/砖型/材料 筛选) ----------
+  /** 重绘当前所在页(overview 或 charts),保持筛选条不回卷 */
+  function rerenderOvlCurrent() {
+    const ov = document.getElementById('view-overview');
+    if (ov && !ov.hidden) { renderOverview(); return; }
+    const cv = document.getElementById('view-charts');
+    if (cv && !cv.hidden) { lastChartsSig = null; renderCharts(); }
+  }
+  /** 根据全选状态同步显示(选中集为空 ⇔ 全部被选中) */
+  function syncOvlCheckboxes() {
+    const typesAll = !ovlTypes.length, matsAll = !ovlMats.length;
+    $$('input[name="ovl-type"]').forEach(function (x) { x.checked = typesAll || ovlTypes.indexOf(x.value) >= 0; });
+    $$('input[name="ovl-mat"]').forEach(function (x) { x.checked = matsAll || ovlMats.indexOf(x.value) >= 0; });
+    syncOvlAllState();
+  }
+  function syncOvlAllState() {
+    const tAll = $$('input[name="ovl-type"]');
+    const tAny = tAll.some(function (x) { return !x.checked; });
+    $$('input.ovl-all[data-group="ovl-type"]').forEach(function (x) { x.checked = !tAny; });
+    const mAll = $$('input[name="ovl-mat"]');
+    const mAny = mAll.some(function (x) { return !x.checked; });
+    $$('input.ovl-all[data-group="ovl-mat"]').forEach(function (x) { x.checked = !mAny; });
+  }
+  /** 生成筛选条 HTML(总揽/图表页共用;目标页 target=overview|charts) */
+  function ovlFilterBarHTML(target) {
+    const types = allTypes(), mats = allMatNames();
+    // 空数组 = 全部:全选态下子项都显示已勾选("全部"也勾),取消某子项即从全部中排除
+    const checked = function (arr, val) { return !arr.length || arr.indexOf(val) >= 0 ? ' checked' : ''; };
+    const chipSel = function (title, name, list, selArr) {
+      return '<div class="ovl-field"><span class="ovl-label">' + esc(title) + '</span><div class="ovl-chips">' +
+        '<label class="ovl-chip-all"><input type="checkbox" class="ovl-all" data-group="' + name + '"' + (selArr.length === 0 ? ' checked' : '') + '>全部</label>' +
+        list.map(function (x) {
+          return '<label class="ovl-chip"><input type="checkbox" name="' + name + '" value="' + esc(x) + '"' + checked(selArr, x) + '>' + esc(x) + '</label>';
+        }).join('') + '</div></div>';
+    };
+    const hasDate = !!(ovlFrom || ovlTo), hasOther = ovlTypes.length || ovlMats.length;
+    return '<div class="ovl-filter">' +
+      '<div class="ovl-row">' +
+        '<span class="ovl-label">' + icon('calendar', 15) + '时间段:</span>' +
+        '<input type="date" id="ovl-from" value="' + esc(ovlFrom) + '">' +
+        '<span class="ovl-sep">至</span>' +
+        '<input type="date" id="ovl-to" value="' + esc(ovlTo) + '">' +
+        '<button class="small" data-action="ovl-apply" data-page="' + target + '">应用筛选</button>' +
+        ((hasDate || hasOther) ? '<button class="small" data-action="ovl-clear" data-page="' + target + '">清除</button>' : '') +
+      '</div>' +
+      chipSel('砖型', 'ovl-type', types, ovlTypes) +
+      chipSel('材料', 'ovl-mat', mats, ovlMats) +
+      '<div class="ovl-count">' + (hasDate || hasOther ? '筛选后:' : '范围:') + ' ' +
+        ovlFiltered().length + ' 个批次</div>' +
+    '</div>';
+  }
+
+  /** 成本总揽页 */
+  function renderOverview() {
+    const v = $('#view-overview');
+    if (!v) return;
+    const comps = ovlComps();
+    const totalCost = comps.reduce(function (s, x) { return s + (isFinite(x.c.calc.costTotal1) ? x.c.calc.costTotal1 : 0); }, 0);
+    const totalKg = comps.reduce(function (s, x) { return s + (isFinite(x.c.listTotals.usageKg) ? x.c.listTotals.usageKg : 0); }, 0);
+    const typeRows = typeAggregate(comps).sort(function (a, b) { return b.cost - a.cost; });
+    const matRows = matAggregate(comps).sort(function (a, b) { return b.amount - a.amount; });
+
+    const kpi = function (label, val, ic) {
+      return '<div class="kpi-card kpi-cost"><span class="kpi-ic">' + icon(ic, 18) + '</span>' +
+        '<div class="kpi-body"><span class="kpi-label">' + esc(label) + '</span><span class="kpi-value">' + val + '</span></div></div>';
+    };
+    const noData = '<p class="empty-hint">当前筛选下暂无数据。请调整筛选(时间段/砖型/材料)或先创建估算单。</p>';
+    const typeTable = typeRows.length ? '<table class="grid"><thead><tr>' +
+      '<th class="l">砖型(型号)</th><th>批次</th><th>成本总价①合计</th><th>平均成本/批</th><th>总用料(公斤)</th></tr></thead><tbody>' +
+      typeRows.map(function (r) {
+        return '<tr><td class="l">' + esc(r.type) + '</td><td>' + r.n + '</td>' +
+          '<td class="money">¥' + fmt(r.cost, 0) + '</td>' +
+          '<td class="money">¥' + fmt(r.avg, 2) + '</td>' +
+          '<td>' + fmt(r.kg, 0) + '</td></tr>';
+      }).join('') + '</tbody></table>' : noData;
+    const matTable = matRows.length ? '<table class="grid"><thead><tr>' +
+      '<th class="l">材料</th><th>总消耗(公斤)</th><th>消耗金额</th></tr></thead><tbody>' +
+      matRows.map(function (r) {
+        return '<tr><td class="l">' + esc(r.name) + '</td><td>' + fmt(r.kg, 0) + '</td>' +
+          '<td class="money">¥' + fmt(r.amount, 0) + '</td></tr>';
+      }).join('') + '</tbody></table>' : noData;
+
+    v.innerHTML =
+      '<h2 class="sec-title">成本总揽</h2>' +
+      '<div class="ovl-toolbar">' +
+        ovlFilterBarHTML('overview') +
+        '<button class="primary" data-action="ovl-to-charts" title="按当前筛选在图表预览中看图(新窗口)">' + btnIcon('chart', '生成图表(打开图表预览)') + '</button>' +
+      '</div>' +
+      (comps.length
+        ? '<div class="kpi-row">' +
+            kpi('批次', comps.length, 'folder') +
+            kpi('成本总价①合计', '¥' + fmt(totalCost, 0), 'chart') +
+            kpi('总用料(公斤)', fmt(totalKg, 0), 'calc') +
+          '</div>'
+        : '') +
+      '<div class="ovl-grid">' +
+        '<div class="card ovl-card"><h3>按砖型统计</h3>' + typeTable + '</div>' +
+        '<div class="card ovl-card"><h3>材料总消耗</h3>' + matTable + '</div>' +
+      '</div>' +
+      '<p class="editor-note">统计范围基于估算单批次:成本①=本期用料金额合计;平均成本=某砖型成本合计÷其批次数量;材料消耗跨批次按用量/金额汇总(自动,不含手工填的单价列)。</p>';
+  }
+
   // ---------- 历史对比 ----------
   function renderCompare() {
     const v = $('#view-compare');
@@ -1114,35 +1379,49 @@
   }
   function renderCharts() {
     const v = $('#view-charts');
-    // 懒加载:数据、选中批次与汇总模式均未变 → 直接复用当前 DOM(图表计算昂贵,避免每次切页重算)
-    const sig = chartsSig();
-    if (v && !v.hidden && v.innerHTML && lastChartsSig === sig && lastChartId === chartEstId && lastMatMode === chartMatMode) {
+    const sig = chartsSig() + '~' + ovlFrom + '~' + ovlTo + '~' + ovlTypes.join(',') + '~' + ovlMats.join(',') + '~' + chartEstId + '~' + chartMatMode;
+    if (v && !v.hidden && v.innerHTML && lastChartsSig === sig) {
       return;
     }
-    const estimates = data.estimates.slice().reverse(); // 新→旧
-    if (!estimates.length) {
-      v.innerHTML = '<h2 class="sec-title">图表预览</h2>' +
-        '<p class="empty-hint">暂无估算单。请先在"估算单"页创建估算单后再查看图表。</p>';
-      lastChartsSig = sig; lastChartId = null; lastMatMode = chartMatMode;
-      return;
-    }
-    // 环形图:选中的批次(默认最新)
-    if (!chartEstId || !estimates.some(function (e) { return e.id === chartEstId; })) chartEstId = estimates[0].id;
-    const selComp = Charts.computeAll(estimates.filter(function (e) { return e.id === chartEstId; }))[0];
-    const donutItems = selComp.c.rows.map(function (r) { return { name: r.name, value: r.usageAmount }; });
-    const selOpts = estimates.map(function (e) {
-      return '<option value="' + e.id + '"' + (e.id === chartEstId ? ' selected' : '') + '>' +
-        Charts.esc(e.name || e.id) + '（' + Charts.esc(e.startDate || '无日期') + '）</option>';
-    }).join('');
+    // 筛选后的估算单(新→旧;图表默认用全部可用批次)
+    const estimates = ovlFiltered().slice().reverse();
+    const hasFilter = !!(ovlFrom || ovlTo || ovlTypes.length || ovlMats.length);
+    const filterBar = ovlFilterBarHTML('charts');
+    const linkToOv = '<button class="small" data-action="ovl-to-overview" title="按当前筛选到成本总揽查看汇总(新窗口)">' + btnIcon('view', '到成本总揽') + '</button>';
+    const head = '<h2 class="sec-title">图表预览</h2>' +
+      '<div class="ovl-toolbar">' + filterBar +
+        linkToOv +
+        '<span class="chart-note" style="margin-left:auto">当前范围' + (hasFilter ? '(已筛选)' : '(全部批次)') + ' · ' + estimates.length + ' 批</span>' +
+      '</div>';
 
-    // 柱状图 / 折线图:按开始日期升序
+    if (!estimates.length) {
+      v.innerHTML = head + '<p class="empty-hint">当前筛选下暂无估算单。请调整筛选,或在"估算单"页创建后再查看图表。</p>';
+      lastChartsSig = sig;
+      return;
+    }
+
+    // ---- 环形图:跨批次材料成本构成(所有筛选内批次按材料合计本期用料金额)----
+    const donutMap = new Map();
+    estimates.forEach(function (e) {
+      const c = CostCalc.compute(e);
+      c.rows.forEach(function (r) {
+        if (ovlMats.length && ovlMats.indexOf(r.name) < 0) return;
+        if (!donutMap.has(r.name)) donutMap.set(r.name, 0);
+        donutMap.set(r.name, donutMap.get(r.name) + (isFinite(r.usageAmount) ? r.usageAmount : 0));
+      });
+    });
+    const donutItems = Array.from(donutMap.entries()).map(function (kv) { return { name: kv[0], value: kv[1] }; })
+      .sort(function (a, b) { return b.value - a.value; });
+    const donutTotal = donutItems.reduce(function (s, it) { return s + it.value; }, 0);
+
+    // ---- 柱状图 / 折线图:按开始日期升序(筛选后各批次)----
     const chrono = estimates.slice().sort(function (a, b) {
       const da = a.startDate || '', db = b.startDate || '';
       if (da !== db) return da < db ? -1 : 1;
       return a.id < b.id ? -1 : 1;
     });
     const shortLabel = function (e) {
-      const nm = e.name || e.id;
+      const nm = Charts.esc(e.name || e.id);
       return [nm.length > 10 ? nm.slice(0, 10) + '…' : nm, e.startDate || ''];
     };
     const groups = chrono.map(function (e) {
@@ -1150,11 +1429,12 @@
       return { id: e.id, label: shortLabel(e), a: c.calc.costTotal1, b: c.calc.costTotal2 };
     });
 
-    // 材料汇总(跨批次,按名称合并;用量单位公斤)
+    // ---- 材料汇总(跨批次,按名称合并)----
     const matMap = new Map();
-    chrono.forEach(function (e) {
+    estimates.forEach(function (e) {
       const c = CostCalc.compute(e);
       c.rows.forEach(function (r) {
+        if (ovlMats.length && ovlMats.indexOf(r.name) < 0) return;
         if (!matMap.has(r.name)) matMap.set(r.name, { kg: 0, amount: 0 });
         const o = matMap.get(r.name);
         o.kg += r.usageKg;
@@ -1172,13 +1452,12 @@
       ? Charts.hbarHTML(matByKg, 'kg')
       : Charts.hbarHTML(matByAmount, 'amount');
 
-    v.innerHTML =
-      '<h2 class="sec-title">图表预览</h2>' +
+    v.innerHTML = head +
       '<div class="chart-grid">' +
         '<div class="chart-card">' +
-          '<div class="chart-head"><h3>材料成本构成(本期用料金额)</h3>' +
-            '<select id="chart-est-select">' + selOpts + '</select></div>' +
-          Charts.donutHTML(donutItems, selComp.c.calc.costTotal1, selComp.e.id) +
+          '<div class="chart-head"><h3>材料成本构成(跨批次 · 本期用料金额)</h3>' +
+            '<span class="chart-note">全部筛选批次按材料汇总;点击扇区打开相关批次</span></div>' +
+          (donutTotal > 0 ? Charts.donutHTML(donutItems, donutTotal, null) : '<p class="empty-hint">当前筛选下无用料金额数据</p>') +
         '</div>' +
         '<div class="chart-card">' +
           '<div class="chart-head"><h3>批次成本总价对比</h3><span class="chart-note">① 金额合计 / ② 吨价×用量 · 点击柱子查看批次</span></div>' +
@@ -1197,7 +1476,7 @@
           matItemsHTML +
         '</div>' +
       '</div>';
-    lastChartsSig = sig; lastChartId = chartEstId; lastMatMode = chartMatMode;
+    lastChartsSig = sig;
   }
 
   // ---------- 事件委托 ----------
@@ -1265,6 +1544,39 @@
       }
       return;
     }
+    // 成本总揽/图表筛选:日期、多选即时生效(应用按钮用于确认后跳转)
+    if (el.id === 'ovl-from' || el.id === 'ovl-to') {
+      const f = $('#ovl-from'), t = $('#ovl-to');
+      const fv = f ? f.value : '', tv = t ? t.value : '';
+      if (fv && tv && fv > tv) { toast('开始日期不能晚于结束日期'); if (el.id === 'ovl-from') { f.value = ovlFrom; } else { t.value = ovlTo; } return; }
+      ovlFrom = fv; ovlTo = tv;
+      rerenderOvlCurrent();
+      return;
+    }
+    if (el.matches('input.ovl-all[data-group]')) {
+      const g = el.dataset.group;
+      if (g === 'ovl-type') ovlTypes = el.checked ? [] : allTypes();
+      if (g === 'ovl-mat') ovlMats = el.checked ? [] : allMatNames();
+      syncOvlCheckboxes();
+      rerenderOvlCurrent();
+      return;
+    }
+    if (el.matches('input[name="ovl-type"]')) {
+      const sel = Array.from(document.querySelectorAll('input[name="ovl-type"]:checked')).map(function (x) { return x.value; });
+      const all = allTypes();
+      ovlTypes = sel.length === all.length && all.length ? [] : sel; // 全部勾选等价于"全部"(空)
+      syncOvlAllState();
+      rerenderOvlCurrent();
+      return;
+    }
+    if (el.matches('input[name="ovl-mat"]')) {
+      const sel = Array.from(document.querySelectorAll('input[name="ovl-mat"]:checked')).map(function (x) { return x.value; });
+      const all = allMatNames();
+      ovlMats = sel.length === all.length && all.length ? [] : sel;
+      syncOvlAllState();
+      rerenderOvlCurrent();
+      return;
+    }
   });
 
   document.addEventListener('click', function (e) {
@@ -1286,6 +1598,27 @@
     const i = btn.dataset.i;
 
     switch (action) {
+      case 'ovl-clear': {
+        ovlFrom = ''; ovlTo = ''; ovlTypes = []; ovlMats = [];
+        ovlCur = btn.dataset && btn.dataset.page ? btn.dataset.page : 'overview';
+        if (ovlCur === 'charts') { lastChartsSig = null; renderCharts(); } else renderOverview();
+        break;
+      }
+      case 'ovl-to-charts':
+      case 'ovl-to-overview': {
+        const target = action === 'ovl-to-charts' ? 'charts' : 'overview';
+        ovlCur = target;
+        // 同源新窗口:通过 sessionStorage 传递当前筛选;新窗口应用前先读回
+        try {
+          sessionStorage.setItem('ovlFilter', JSON.stringify({ from: ovlFrom, to: ovlTo, types: ovlTypes, mats: ovlMats }));
+        } catch (e) { /* 隐私模式等场景忽略 */ }
+        const url = location.pathname + location.search + '#ovl-' + target + '?f=1';
+        if (e && e.shiftKey) { location.hash = '#' + (target === 'charts' ? 'ovl-charts' : 'ovl-overview'); }
+        else {
+          try { window.open(url, '_blank'); } catch (err) { location.hash = '#' + (target === 'charts' ? 'ovl-charts' : 'ovl-overview'); }
+        }
+        break;
+      }
       case 'add-material': {
         const name = $('#new-mat-name').value.trim();
         const zone = $('#new-mat-zone').value;
@@ -1421,6 +1754,36 @@
         clearGridOverrides('材料行结构已变化,已清空公式覆盖');
         renderEstimateEditor();
         break;
+      case 'apply-prev-stock': {
+        // 按"上存=上一编号批次库存"一键填入(仅改提示中列出的差异材料)
+        const prev = prevBatchOf(estDraft.code, estDraft.id);
+        if (!prev) { toast('未找到同编号的上一批次'); break; }
+        const ref = prevStockMap(prev);
+        let applied = 0;
+        estDraft.rows.forEach(function (r) {
+          if (ref[r.name] === undefined) return;
+          const cur = (r.stockOnHand === '' || r.stockOnHand === null || r.stockOnHand === undefined) ? null : Number(r.stockOnHand);
+          if (cur === null || Math.abs(cur - ref[r.name]) > 1e-9) {
+            r.stockOnHand = ref[r.name];
+            applied++;
+          }
+        });
+        if (applied) {
+          markDirty();
+          // 清理可能存在的该列覆盖并重算
+          Object.keys(gridOverV).forEach(function (a) {
+            const def = gridCache && gridCache.addrCells[a];
+            if (def && def.path && /\.stockOnHand$/.test(def.path)) delete gridOverV[a];
+          });
+          gridEval();
+          paintAll(gridCache);
+          renderEstimateEditor();
+          toast('已按上一批次填入 ' + applied + ' 种材料的上存(库存)');
+        } else {
+          toast('上存材料已与上一批次一致,无需调整');
+        }
+        break;
+      }
       case 'db-snapshot':
         Store.authedFetch('/api/db/backup', { method: 'POST' })
           .then(function (resp) { return resp.json().then(function (j) { return { j: j, status: resp.status }; }); })

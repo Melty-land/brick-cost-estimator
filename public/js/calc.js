@@ -31,6 +31,11 @@
     return b === 0 ? 0 : a / b;
   }
 
+  /** 期末库存材料 = 上存材料 + 本期进料 - 本期用料数量(公斤)(用户口径;可为负=用料超出库存) */
+  function closingStock(stockOnHand, stockIn, usageKg) {
+    return num(stockOnHand) + num(stockIn) - num(usageKg);
+  }
+
   /**
    * 计算一个估算单的全部派生值。
    *
@@ -100,7 +105,8 @@
         id: r.id, name: r.name, zone: r.zone, idx: r.idx,
         qtyPerPot: r.qtyPerPot, price: r.price,
         stockOnHand: r.stockOnHand, stockIn: r.stockIn, qty: r.qty,
-        stock: r.stockOnHand + r.stockIn,        // 库存材料 = 上存 + 进料
+        // 库存材料 = 上存材料 + 本期进料 - 本期用料数量(公斤)(用户口径;可为负)
+        stock: closingStock(r.stockOnHand, r.stockIn, usageKg),
         amount: r.price * r.qty,                 // 金额 = 单价 × 数量(公斤)
         usageKg: usageKg,
         usageTon: usageKg,                        // 兼容旧字段名,现为公斤数值
@@ -147,5 +153,5 @@
     return { rows: list, bottom: bottom, top: top, listTotals: listTotals, calc: calc };
   }
 
-  return { compute: compute, safeDiv: safeDiv, num: num, ZONES: ZONES, KG_PER_TON: KG_PER_TON };
+  return { compute: compute, safeDiv: safeDiv, num: num, ZONES: ZONES, KG_PER_TON: KG_PER_TON, closingStock: closingStock };
 });

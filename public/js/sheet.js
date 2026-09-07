@@ -230,7 +230,8 @@
       place(r, 1, lab(1, r, item.r.name, 'mat', 1));
       place(r, 2, inp(2, r, 'rows.' + item.i + '.stockOnHand', numOrBlank(item.r.stockOnHand), 'num', 1));
       place(r, 3, inp(3, r, 'rows.' + item.i + '.stockIn', numOrBlank(item.r.stockIn), 'num', 1));
-      place(r, 4, fx(4, r, '=C' + r + '+D' + r, 1));                       // 库存材料 = 上存 + 进料
+      // 库存材料 = 上存材料 + 本期进料 - 本期用料数量(公斤)(用户口径;可为负=用料超出库存)
+      place(r, 4, fx(4, r, '=C' + r + '+D' + r + '-G' + r, 1));
       place(r, 5, fx(5, r, '=' + (isBottom ? 'C' : 'I') + zr2, 1));        // 本期用料单价 = 配比单价
       place(r, 6, fx(6, r, '=' + qtyCol + zr2 + '*$' + potCol + '$' + potRow, 2)); // 本期用料数量(公斤) = 每锅×锅数
       place(r, 8, fx(8, r, '=F' + r + '*G' + r, 2));                       // 本期用料金額 = 单价×数量

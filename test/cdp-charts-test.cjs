@@ -1,5 +1,9 @@
 /**
- * CDP 图表页测试:验证四种图表的渲染、切换与联动。
+ * CDP 图表页测试(2026-09 改版:跨批次环形 + 共用筛选):
+ * 1) 四图齐全;环形图为跨批次合计(538.76万 = 2,428,000+2,959,600)
+ * 2) 日期筛选改变环形合计;清除筛选恢复
+ * 3) 材料汇总切换 按用量(公斤)
+ * 4) 点击柱状图柱子 → 跳转估算单编辑器
  * 运行:node test/cdp-charts-test.cjs
  */
 'use strict';
@@ -55,18 +59,19 @@ async function main() {
     if (r.result && r.result.exceptionDetails) throw new Error('JS 异常: ' + JSON.stringify(r.result.exceptionDetails.exception || r.result.exceptionDetails.text));
     return r.result ? r.result.result.value : undefined;
   }
-
-  // 等待图表页渲染
-  let ready = false;
-  for (let i = 0; i < 40; i++) {
-    await sleep(400);
-    ready = await evalJS(`!!document.querySelector('#chart-est-select')`);
-    if (ready) break;
+  async function waitFor(expr, tries = 50) {
+    for (let i = 0; i < tries; i++) {
+      await sleep(300);
+      if (await evalJS(expr)) return true;
+    }
+    return false;
   }
-  if (!ready) { console.error('✗ 图表页未渲染'); process.exit(1); }
+
+  // 等待图表页渲染(跨批次环形中心合计出现)
+  if (!(await waitFor(`!!document.querySelector('.donut-total')`))) { console.error('✗ 图表页未渲染'); process.exit(1); }
   console.log('✓ 图表页已打开');
 
-  // ---- 1. 四种图表元素数量 ----
+  // ---- 1. 四种图表元素数量 + 跨批次环形合计 ----
   const counts = await evalJS(`(() => {
     const q = (s) => document.querySelectorAll(s).length;
     return JSON.stringify({
@@ -74,7 +79,6 @@ async function main() {
       legendItems: q('.chart-legend-item'),
       bars: q('.bar'),
       polylines: q('polyline'),
-      lineDots: q('.dot'),
       hbars: q('.hbar'),
       donutTotal: (document.querySelector('.donut-total') || {}).textContent
     });
@@ -84,19 +88,26 @@ async function main() {
   if (c1.donutSegs < 5 || c1.legendItems < 5 || c1.bars < 2 || c1.polylines < 2 || c1.hbars < 5) {
     console.error('✗ 图表元素数量异常'); process.exit(1);
   }
-  if (c1.donutTotal !== '295.96万') { console.error('✗ 环形图中心合计异常: ' + c1.donutTotal); process.exit(1); }
-  console.log('✓ 四图齐全:环形图 11 段、柱状图 4 柱、折线 2 条、汇总条形 11 条;默认选中最新批次(合计 295.96万)');
+  // 跨批次合计 = e1(2,428,000) + e2(2,959,600) = 5,387,600 → 538.76万
+  if (c1.donutTotal !== '538.76万') { console.error('✗ 环形图中心合计异常: ' + c1.donutTotal); process.exit(1); }
+  console.log('✓ 四图齐全;环形图为跨批次合计(538.76万 = 两批成本①之和)');
 
-  // ---- 2. 切换环形图批次 -> e1,合计应为 2,428 ----
+  // ---- 2. 日期筛选 → 环形合计变化;清除恢复 ----
   await evalJS(`(() => {
-    const sel = document.querySelector('#chart-est-select');
-    sel.value = 'e1';
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const f = document.getElementById('ovl-from');
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(f, '2026-10-01');
+    f.dispatchEvent(new Event('change', { bubbles: true }));
   })()`);
-  await sleep(300);
-  const donutTotal2 = await evalJS(`document.querySelector('.donut-total').textContent`);
-  if (donutTotal2 !== '242.80万') { console.error('✗ 切换批次后合计异常: ' + donutTotal2); process.exit(1); }
-  console.log('✓ 批次切换:环形图合计 295.96万 → 242.80万(e1 金额合计)');
+  await sleep(400);
+  let dt = await evalJS(`document.querySelector('.donut-total').textContent`);
+  if (dt !== '295.96万') { console.error('✗ 筛选(≥2026-10-01)后环形合计应为 295.96万: ' + dt); process.exit(1); }
+  console.log('✓ 日期筛选:环形合计 538.76万 → 295.96万(仅 2026-10 批次)');
+  await evalJS(`(() => { const b = document.querySelector('[data-action="ovl-clear"]'); if (b) b.click(); })()`);
+  await sleep(400);
+  dt = await evalJS(`document.querySelector('.donut-total').textContent`);
+  if (dt !== '538.76万') { console.error('✗ 清除筛选后应恢复 538.76万: ' + dt); process.exit(1); }
+  console.log('✓ 清除筛选恢复全部批次');
 
   // ---- 3. 材料汇总切换 按用量(公斤) ----
   await evalJS(`document.querySelector('[data-mode="kg"]').click()`);

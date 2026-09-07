@@ -270,6 +270,7 @@ td.money { color: var(--primary); }
 .donut-total { font-size: 22px; font-weight: 700; fill: var(--text); font-family: var(--font-num); }
 .donut-cap { font-size: 11px; fill: var(--text-3); }
 .donut-seg { cursor: pointer; }
+.donut-seg:not([data-chart-open]) { cursor: default; }
 .donut-seg:hover { stroke-width: 40; }
 .axis-label { font-size: 11px; fill: var(--text-3); }
 .x-label { font-size: 11px; fill: var(--text-2); }
@@ -369,6 +370,14 @@ table.sheet-grid td.void { border: 1px solid transparent; }
 .chip-x { border: none; background: none; color: var(--danger); cursor: pointer; font-size: 11px; padding: 0 4px; border-radius: 50%; }
 .chip-x:hover { color: #fff; background: var(--danger); }
 .editor-note { color: var(--text-3); font-size: 12px; margin-top: 10px; }
+
+/* ---- 跨批次上存材料提示条(2026-09:上存=上一编号批次库存) ---- */
+.stock-prev-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; padding: 8px 12px;
+  border-radius: 12px; background: #fff7ed; border: 1px solid rgba(217, 119, 6, .35); font-size: 12.5px; color: #7c4a03; }
+.stock-prev-hint .ic-wrap { display: inline-flex; color: var(--accent); }
+.stock-prev-hint .chip { background: #fff; border-color: rgba(217, 119, 6, .3); }
+.stock-prev-hint .chip b { margin-right: 4px; }
+.stock-prev-hint button { margin-left: auto; }
 
 /* ---- 必填高亮 / 状态标签 / 必填提示条 ---- */
 table.sheet-grid td.sg.need { background: var(--accent-soft); font-weight: 700; color: #92600a; }
@@ -474,6 +483,32 @@ button:not(.primary) .spin { border-color: rgba(0, 0, 0, .25); border-top-color:
 .date-filter input[type="date"] { width: 138px; }
 .date-filter .df-count { margin-left: auto; color: var(--text-3); font-size: 12.5px; white-space: nowrap; }
 .date-filter .df-count:empty { display: none; }
+
+/* ---- 成本总揽 / 图表共用筛选(iOS 分段卡片式多选) ---- */
+.ovl-toolbar { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin: 2px 0 14px; }
+.ovl-toolbar > .primary { align-self: center; white-space: nowrap; }
+.ovl-filter {
+  flex: 1 1 520px; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 14px; background: var(--surface-2); border-radius: 12px; font-size: 13px;
+}
+.ovl-filter .ovl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ovl-filter .ovl-label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-weight: 500; white-space: nowrap; }
+.ovl-filter .ovl-label svg.ic { color: var(--primary); }
+.ovl-filter .ovl-sep { color: var(--text-3); }
+.ovl-filter input[type="date"] { width: 138px; }
+.ovl-field { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.ovl-field .ovl-label { min-width: 34px; padding-top: 3px; }
+.ovl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ovl-chips label { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px 2px 8px;
+  background: #fff; border: 1px solid var(--border); border-radius: 980px; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
+.ovl-chips label:hover { border-color: var(--primary); }
+.ovl-chips label:has(input:checked) { background: var(--primary-soft); border-color: rgba(0, 113, 227, .5); color: #005bbd; font-weight: 500; }
+.ovl-chips label.ovl-chip-all { background: var(--surface-3); }
+.ovl-chips input { accent-color: var(--primary); margin: 0; }
+.ovl-count { color: var(--text-3); font-size: 12px; }
+.ovl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+.ovl-card h3 { margin: 0 0 10px; font-size: 14.5px; color: var(--text); }
+.ovl-card { background: var(--surface); border-radius: var(--radius-lg); padding: 16px 18px; box-shadow: var(--shadow-card); border: 1px solid var(--border); }
 
 /* 编辑器工具栏分隔 */
 .toolbar-sep { width: 1px; height: 20px; background: var(--border-strong); margin: 0 4px; }

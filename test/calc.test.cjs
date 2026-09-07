@@ -33,9 +33,9 @@ assert.strictEqual(c.bottom.amountTotal, 124000);
 assert.strictEqual(c.top.amountTotal, 60000);
 assert.ok(Math.abs(c.top.rows[0].ratio - 800 / 5800) < 1e-12);
 
-// 材料清单:库存 = 上存+进料
-assert.strictEqual(c.rows[0].stock, 5);
-assert.strictEqual(c.rows[1].stock, 2);
+// 材料清单:库存 = 上存+本期进料-本期用料数量(公斤)(用户口径;可为负)
+assert.strictEqual(c.rows[0].stock, 2 + 3 - 2000);   // 黑水泥 -1995
+assert.strictEqual(c.rows[1].stock, 1 + 1 - 3000);   // 机制砂 -2998
 // 金额 = 单价 × 数量(公斤):黑水泥 500×5=2500
 assert.strictEqual(c.rows[0].amount, 2500);
 // 本期用料数量(公斤)= 配比×锅数:黑水泥 200×10=2000;机制砂 300×10=3000;白水泥 100×8=800
@@ -49,7 +49,7 @@ assert.strictEqual(c.rows[1].usageAmount, 240000);
 assert.strictEqual(c.rows[2].usageAmount, 480000);
 // 合计
 assert.strictEqual(c.listTotals.stockOnHand, 3);
-assert.strictEqual(c.listTotals.stock, 8);
+assert.strictEqual(c.listTotals.stock, (2 + 3 - 2000) + (1 + 1 - 3000) + (0 + 1 - 800)); // -5792
 assert.strictEqual(c.listTotals.usageKg, 5800);
 assert.strictEqual(c.listTotals.usageAmount, 1720000);
 // 材料清单占比按使用数量(公斤):黑水泥 2000/5800

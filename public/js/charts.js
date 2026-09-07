@@ -67,8 +67,8 @@
       var len = num(it.value) / sum * C;
       segs += '<circle cx="110" cy="110" r="' + r + '" fill="none" stroke="' + PALETTE[i % PALETTE.length] +
         '" stroke-width="' + sw + '" stroke-dasharray="' + (len - 1) + ' ' + (C - len + 1) + '"' +
-        ' stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 110 110)"' +
-        (estId ? ' data-chart-open="' + estId + '" class="donut-seg"' : '') + '></circle>';
+        ' stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 110 110)" class="donut-seg"' +
+        (estId ? ' data-chart-open="' + estId + '"' : '') + '></circle>';
       offset += len;
     });
 
