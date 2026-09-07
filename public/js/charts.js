@@ -132,6 +132,44 @@
   }
 
   /**
+   * 单柱状图:每批次一条柱(成本总价① 或 本期用料),点击柱跳转批次
+   * @param groups [{id, label:[主,副], v}] 按值绘图
+   */
+  function barOneHTML(groups) {
+    var W = 860, H = 340, mL = 78, mR = 16, mT = 24, mB = 64;
+    var plotW = W - mL - mR, plotH = H - mT - mB;
+    var maxV = Math.max.apply(null, groups.map(function (g) { return num(g.v); })) || 1;
+    var yMax = maxV * 1.12;
+    var step = niceStep(yMax, 4);
+    var n = groups.length;
+    var groupW = plotW / n;
+    var barW = Math.min(46, groupW * 0.46);
+    var base = mT + plotH;
+    var hOf = function (v) { return (num(v) / yMax) * plotH; };
+
+    var grid = '';
+    for (var t = 0; t <= yMax + 1e-9; t += step) {
+      var yy = base - (t / yMax) * plotH;
+      grid += '<line x1="' + mL + '" y1="' + yy + '" x2="' + (W - mR) + '" y2="' + yy + '" class="grid-line"></line>' +
+        '<text x="' + (mL - 8) + '" y="' + (yy + 4) + '" text-anchor="end" class="axis-label">' + fmtC(t) + '</text>';
+    }
+
+    var bars = '';
+    groups.forEach(function (g, i) {
+      var cx = mL + groupW * i + groupW / 2;
+      var hv = hOf(g.v);
+      bars += '<rect x="' + (cx - barW / 2) + '" y="' + (base - hv) + '" width="' + barW + '" height="' + Math.max(hv, 1) + '" fill="#4c78a8" rx="3" data-chart-open="' + g.id + '" class="bar"></rect>';
+      if (hv > 16) bars += '<text x="' + cx + '" y="' + (base - hv - 5) + '" text-anchor="middle" class="bar-val">' + esc(g.vText || fmtC(g.v)) + '</text>';
+      bars += '<text x="' + cx + '" y="' + (base + 16) + '" text-anchor="middle" class="x-label">' + esc(g.label[0]) + '</text>' +
+        (g.label[1] ? '<text x="' + cx + '" y="' + (base + 30) + '" text-anchor="middle" class="x-label dim">' + esc(g.label[1]) + '</text>' : '');
+    });
+
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg">' + grid + bars +
+      '<line x1="' + mL + '" y1="' + base + '" x2="' + (W - mR) + '" y2="' + base + '" class="axis-line"></line>' +
+      '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + base + '" class="axis-line"></line></svg>';
+  }
+
+  /**
    * 折线图:批次成本总价趋势(调用方按时间排序)
    * @param series [{id, label:[主,副], a, b}]
    */
@@ -156,7 +194,9 @@
     function poly(key, color) {
       var pts = series.map(function (s, i) { return x(i) + ',' + yOf(s[key]); }).join(' ');
       var marks = series.map(function (s, i) {
-        return '<circle cx="' + x(i) + '" cy="' + yOf(s[key]) + '" r="4" fill="' + color + '" data-chart-open="' + s.id + '" class="dot"></circle>';
+        var lab = (key === 'a' ? s.aText : s.bText) || '';
+        var tx = lab ? '<text x="' + x(i) + '" y="' + (yOf(s[key]) - 8) + '" text-anchor="middle" class="dot-val">' + esc(lab) + '</text>' : '';
+        return '<circle cx="' + x(i) + '" cy="' + yOf(s[key]) + '" r="4" fill="' + color + '" data-chart-open="' + s.id + '" class="dot"></circle>' + tx;
       }).join('');
       return '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2.5"></polyline>' + marks;
     }
@@ -166,8 +206,12 @@
         (s.label[1] ? '<text x="' + x(i) + '" y="' + (base + 30) + '" text-anchor="middle" class="x-label dim">' + esc(s.label[1]) + '</text>' : '');
     }).join('');
 
+    // 单序列模式:仅画主序列(series[].b === 0 视为不存在第二序列)
+    var hasB = series.some(function (s) { return num(s.b) !== 0; });
+    var hasA = series.some(function (s) { return num(s.a) !== 0; });
+
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg">' + grid +
-      poly('a', '#4c78a8') + poly('b', '#f58518') + labels +
+      (hasA ? poly('a', '#4c78a8') : '') + (hasB ? poly('b', '#f58518') : '') + labels +
       '<line x1="' + mL + '" y1="' + base + '" x2="' + (W - mR) + '" y2="' + base + '" class="axis-line"></line>' +
       '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + base + '" class="axis-line"></line></svg>';
   }
@@ -195,7 +239,7 @@
   }
 
   root.Charts = {
-    donutHTML: donutHTML, barHTML: barHTML, lineHTML: lineHTML, hbarHTML: hbarHTML,
+    donutHTML: donutHTML, barHTML: barHTML, barOneHTML: barOneHTML, lineHTML: lineHTML, hbarHTML: hbarHTML,
     computeAll: computeAll, fmtFull: fmtFull, fmtTon: fmtTon, fmtKg: fmtKg, esc: esc
   };
 })(window);

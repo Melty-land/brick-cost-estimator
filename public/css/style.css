@@ -275,6 +275,7 @@ td.money { color: var(--primary); }
 .axis-label { font-size: 11px; fill: var(--text-3); }
 .x-label { font-size: 11px; fill: var(--text-2); }
 .x-label.dim { fill: var(--text-3); font-size: 10px; }
+.dot-val { font-size: 10px; fill: var(--text-2); }
 .grid-line { stroke: rgba(0, 0, 0, .06); stroke-width: 1; }
 .axis-line { stroke: rgba(0, 0, 0, .15); stroke-width: 1; }
 .bar { cursor: pointer; }

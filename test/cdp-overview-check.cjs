@@ -1,9 +1,9 @@
 /**
- * CDP 成本总揽 + 图表跨批次 + 上存跨批提示(2026-09 新增功能):
- *  1) 成本总揽:#overview 出现筛选条(时间段/砖型/材料多选)与 KPI(2 批合计 ¥5,387,600)
+ * CDP 成本总览 + 图表跨批次 + 上存跨批提示(2026-09 新增功能):
+ *  1) 成本总览:#overview 出现筛选条(时间段/砖型/材料多选)与 KPI(2 批合计 ¥5,387,600)
  *  2) 材料多选:点掉"黑水泥"→ 材料总消耗表不再含黑水泥
  *  3) 日期筛选:≥2026-10-01 → 只剩 e2(成本 ¥2,959,600)
- *  4) 图表页:#charts 顶部有同款筛选条;环形图为跨批次;有「到成本总揽」互跳按钮
+ *  4) 图表页:#charts 顶部有同款筛选条;环形图为跨批次;有「到成本总览」互跳按钮
  *  5) 上存跨批提示:e2 打开时提示上一批次 BZ-240(2026-09-01);一键填入后上存 = 上批库存(-1995)
  * 运行:node test/cdp-overview-check.cjs(需服务在跑;基于演示数据,建议先 seed-demo;
  *      本测试会改 e2 数据(一键填入),结束后请 seed-demo 复位)
@@ -70,18 +70,18 @@ async function main() {
   function assert(cond, msg) { if (!cond) { console.error('✗ ' + msg); process.exit(1); } }
   const kpis = async () => evalJS(`Array.from(document.querySelectorAll('#view-overview .kpi-value')).map(x => x.textContent)`);
 
-  // ---- 1. 成本总揽 KPI ----
+  // ---- 1. 成本总览 KPI ----
   assert(await waitFor(`!document.getElementById('view-overview').hidden && !!document.querySelector('#view-overview .ovl-filter')`), '总揽页未渲染');
   const k1 = await kpis();
   assert(k1.some(v => v.indexOf('5,387,600') >= 0), '总揽成本合计应为 ¥5,387,600,实得 ' + JSON.stringify(k1));
-  console.log('✓ 成本总揽:2 批合计 ¥5,387,600');
+  console.log('✓ 成本总览:2 批合计 ¥5,387,600');
 
   // ---- 2. 材料多选(点掉 黑水泥)→ 材料消耗表不再含它 ----
   assert(await evalJS(`(() => { const lb = Array.from(document.querySelectorAll('#view-overview label.ovl-chip')).find(l => l.textContent.trim() === '黑水泥'); if (!lb) return false; lb.click(); return true; })()`), '未找到黑水泥 chip');
   await sleep(400);
   const rows2 = await evalJS(`(() => { const c = Array.from(document.querySelectorAll('#view-overview .ovl-card')).find(x => x.innerText.indexOf('材料总消耗') >= 0); return c ? Array.from(c.querySelectorAll('tbody tr')).map(tr => tr.cells[0].textContent) : []; })()`);
-  assert(rows2.indexOf('黑水泥') < 0, '排除黑水泥后消耗表仍含它');
-  console.log('✓ 材料多选:排除黑水泥后材料表已不含(共 ' + rows2.length + ' 行)');
+  assert(rows2.length === 1 && rows2[0] === '黑水泥', '单选黑水泥后材料表应只剩黑水泥,实得 ' + JSON.stringify(rows2));
+  console.log('✓ 材料单选:只选黑水泥 → 材料总消耗表仅 1 行黑水泥');
   await evalJS(`(() => { const b = document.querySelector('[data-action="ovl-clear"]'); if (b) b.click(); })()`);
   await sleep(300);
 
@@ -106,7 +106,7 @@ async function main() {
   await sleep(500);
   const chartText = await evalJS(`document.getElementById('view-charts').innerText`);
   assert(chartText.indexOf('时间段') >= 0 && chartText.indexOf('跨批次') >= 0, '图表页缺筛选条/跨批次环形');
-  assert(await evalJS(`!!document.querySelector('[data-action="ovl-to-overview"]')`), '图表页缺「到成本总揽」');
+  assert(await evalJS(`!!document.querySelector('[data-action="ovl-to-overview"]')`), '图表页缺「到成本总览」');
   console.log('✓ 图表页:跨批次环形 + 共用筛选 + 互跳按钮');
 
   // ---- 5. 上存跨批提示(e2 ← e1)----
@@ -123,7 +123,7 @@ async function main() {
 
   assert(errs.length === 0, '页面 console 错误:' + JSON.stringify(errs).slice(0, 300));
   console.log('✓ 零异常');
-  console.log('\n✅ 成本总揽 / 图表跨批次 / 上存跨批提示 全部通过');
+  console.log('\n✅ 成本总览 / 图表跨批次 / 上存跨批提示 全部通过');
   ws.close();
   child.kill();
   setTimeout(() => process.exit(0), 100);
