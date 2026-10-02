@@ -143,6 +143,7 @@ node server.js
 - **编辑体验**:新建估算单**编制人自动填当前登录用户名**;表格版式固定,**1920 宽屏整表显示无需横向拖拽**(窄窗口自动出现横向滚动);
 - **编号概念**:产品编号(产品档案,如 BZ-240)与估算单的预算表编号相互独立,导入产品配方时**不会**自动填入预算表编号;
 - **成本总览**(位于估算单与图表预览之间):按 时间段/砖型(多选)/材料(多选,点哪项选哪项) 汇总生产总成本、平均成本/砖型、材料总消耗;「生成图表」按同一筛选在新窗口打开图表预览;
+- **用料明细**(位于成本总览之后):逐批逐料的用料明细表(含**期末结存** = 上存+进料−用料,负数标红)+ 剩余材料表(累计剩余、最新批次结存),支持时间段/产品/材料筛选与两表导出;产品按 关联产品→名称规格→预算表编号 自动匹配;汇总口径沿用成本总览不重复;
 - **图表预览(跨批次+口径)**:材料成本构成环形图 / 批次成本对比(单柱) / 各批次每平方成本折线 / 各材料库存条形,**全局"金额/用量"口径切换**,按需懒加载;顶部与成本总览共用筛选并可互相跳转;仅对比两图可点击跳批次;
 - **存储与备份**:数据存于本地 SQLite;支持在线快照(VACUUM INTO,保留 30 份)、一键导出单文件 zip、导入恢复(需管理员,导入前自动快照)。
 
@@ -181,6 +182,7 @@ node test/calc.test.cjs        # 计算单元测试
 node test/formula.test.cjs     # 公式引擎单元测试
 node test/sheet.test.cjs       # 表格默认公式一致性
 node test/exporter.test.cjs    # Excel 导出(SpreadsheetML)单元测试
+node test/stats.test.cjs       # 用料明细/剩余材料聚合单元测试
 node test/data-audit.cjs       # 数据审计(字段/公式口径/量级;需服务在跑)
 node test/mock-demo.cjs        # 组装 5 组模拟砖型数据(幂等,手动运行)
 node test/seed-demo.cjs        # 重置演示数据(材料 11 + 产品 1 + 估算单 2)
@@ -192,6 +194,7 @@ node test/cdp-grid-test.cjs    # 浏览器表格编辑器
 node test/cdp-trace-test.cjs   # 引用追踪高亮(公式影响链)
 node test/cdp-layout-check.cjs # 材料清单 9 列版式 + 导出 12 列对齐
 node test/cdp-overview-check.cjs # 成本总览/筛选/跨批次图表/上存跨批结转
+node test/cdp-usage-test.cjs   # 用料明细页(明细/剩余材料/筛选/导出)
 node test/cdp-nav-scroll-test.cjs # favicon 204/退出与再进入(hash 不同步)/点击不跳顶
 node test/cdp-rules-test.cjs   # 必填/草稿/退出弹窗/相邻校验
 node test/cdp-crud-test.cjs    # 浏览器 CRUD
