@@ -95,11 +95,11 @@ async function main() {
   if (!(await cellHasNeed('B7'))) { console.error('✗ 清空后应恢复高亮'); process.exit(1); }
   console.log('✓ 必填校验:0 视为已填写;清空恢复高亮');
 
-  // 填写部分必填(名称 L2 编制人, C? 直接填 author/name),高亮取消
+  // 填写部分必填(名称 B2、编制人 J2),高亮取消
   await setFx('B2', '规则测试砖');
-  await setFx('L2', '王五');
-  if (await cellHasNeed('B2') || await cellHasNeed('L2')) { console.error('✗ 填入后高亮未取消'); process.exit(1); }
-  console.log('✓ 填入后高亮取消(B2 名称 / L2 编制人)');
+  await setFx('J2', '王五');
+  if (await cellHasNeed('B2') || await cellHasNeed('J2')) { console.error('✗ 填入后高亮未取消'); process.exit(1); }
+  console.log('✓ 填入后高亮取消(B2 名称 / J2 编制人)');
 
   // 保存为可用表格 -> 被拦截(仍有必填缺失),停留在编辑器
   await click('[data-action="editor-save"]');
@@ -121,8 +121,8 @@ async function main() {
 
   // ---- 相邻批次校验:把 e1(同编号 BZ-240)的结束日期改到 e2 开始之后 ----
   await evalJS(`location.hash = '#estimate/e1'`);
-  await waitFor(`!document.getElementById('view-editor').hidden && !!document.querySelector('td[data-addr="I2"]')`);
-  await setFx('I2', '2026-10-15'); // e1 结束 10-15 晚于 e2 开始 10-01
+  await waitFor(`!document.getElementById('view-editor').hidden && !!document.querySelector('td[data-addr="H2"]')`);
+  await setFx('H2', '2026-10-15'); // e1 结束 10-15 晚于 e2 开始 10-01
   await click('[data-action="editor-save-draft"]');
   await sleep(500);
   const confirmShown = await evalJS(`!document.getElementById('confirm-modal').hidden`);
@@ -137,7 +137,7 @@ async function main() {
   // 再次修改 e1 -> 取消保存(应留在编辑器)
   await evalJS(`location.hash = '#estimate/e1'`);
   await waitFor(`!document.getElementById('view-editor').hidden`);
-  await setFx('I2', '2026-10-31'); // 与 e2 开始重叠
+  await setFx('H2', '2026-10-31'); // 与 e2 开始重叠
   await click('[data-action="editor-save-draft"]');
   await sleep(500);
   const confirmShown2 = await evalJS(`!document.getElementById('confirm-modal').hidden`);

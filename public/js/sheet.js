@@ -115,17 +115,18 @@
     place(r, 0, { kind: 'label', text: TITLE, span: COL_COUNT, cls: 'title' });
 
     // ===== 行 2:表头信息(名称规格 | 预算表编号 | 开始日期 | 结束日期 | 编制人) =====
+    // 日期两项相邻(开始日期值后紧接结束日期),末尾空出的列由"编制人"值跨列填充铺满 12 列
     r = addRow();
     place(r, 0, lab(0, r, '名称规格', 'lab', 1));
     place(r, 1, inp(1, r, 'name', est.name != null ? String(est.name) : '', 'text', 1));
     place(r, 2, lab(2, r, '预算表编号', 'lab', 1));
     place(r, 3, inp(3, r, 'code', est.code != null ? String(est.code) : '', 'text', 1));
     place(r, 4, lab(4, r, '开始日期', 'lab', 1));
-    place(r, 5, inp(5, r, 'startDate', est.startDate || '', 'date', 2));
-    place(r, 7, lab(7, r, '结束日期', 'lab', 1));
-    place(r, 8, inp(8, r, 'endDate', est.endDate || '', 'date', 2));
-    place(r, 10, lab(10, r, '编制人', 'lab', 1));
-    place(r, 11, inp(11, r, 'author', est.author || '', 'text', 1));
+    place(r, 5, inp(5, r, 'startDate', est.startDate || '', 'date', 1));
+    place(r, 6, lab(6, r, '结束日期', 'lab', 1));
+    place(r, 7, inp(7, r, 'endDate', est.endDate || '', 'date', 1));
+    place(r, 8, lab(8, r, '编制人', 'lab', 1));
+    place(r, 9, inp(9, r, 'author', est.author || '', 'text', 3));
 
     // ===== 行 3:每块砖规格(长/宽/高 手动必填;面积/体积自动) =====
     r = addRow();
