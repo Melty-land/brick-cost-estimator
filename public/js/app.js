@@ -1359,11 +1359,37 @@
       heads.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') +
       '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
-  /** 剩余材料表(累计 + 最新批次结存) */
+  /** 剩余材料表(累计上存/进料/用料、累计剩余、最新批次结存) */
   function renderUsageStock(res) {
     const box = $('#usage-stock');
     if (!box) return;
-    box.innerHTML = '<p class="empty-hint">剩余材料(下一任务实现):共 ' + res.stock.length + ' 种材料</p>';
+    const heads = ['材料名称', '所属区', '累计上存(公斤)', '累计进料(公斤)', '累计用料(公斤)',
+      '累计剩余(公斤)', '最新批次结存(公斤)', '涉及批次数'];
+    const head = '<div class="chart-head"><h3>剩余材料</h3>' +
+      '<span class="chart-note">累计剩余 = Σ上存 + Σ进料 − Σ用料(可为负);最新批次结存取日期最新批次</span></div>';
+    if (!res.stock.length) {
+      box.innerHTML = head + '<p class="empty-hint">当前筛选下暂无剩余材料数据。</p>';
+      return;
+    }
+    const body = res.stock.map(function (s) {
+      const totalCls = s.closingTotal < 0 ? ' neg' : '';
+      const lastCls = (s.latestClosing !== null && s.latestClosing < 0) ? ' neg' : '';
+      const lastText = s.latestClosing === null ? '—' : fmt(s.latestClosing, 2);
+      return '<tr data-sh="' + s.stockOnHand + '" data-si="' + s.stockIn + '" data-usage="' + s.usageKg + '">' +
+        '<td>' + esc(s.name) + '</td>' +
+        '<td>' + esc(s.zone || '—') + '</td>' +
+        '<td class="num">' + fmt(s.stockOnHand, 2) + '</td>' +
+        '<td class="num">' + fmt(s.stockIn, 2) + '</td>' +
+        '<td class="num">' + fmt(s.usageKg, 2) + '</td>' +
+        '<td class="num' + totalCls + '">' + fmt(s.closingTotal, 2) + '</td>' +
+        '<td class="num' + lastCls + '">' + lastText + '</td>' +
+        '<td class="num">' + fmt(s.estCount, 0) + '</td>' +
+        '</tr>';
+    }).join('');
+    box.innerHTML = head +
+      '<div class="usage-table-wrap"><table class="usage-table"><thead><tr>' +
+      heads.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
 
   /** 成本总览页 */

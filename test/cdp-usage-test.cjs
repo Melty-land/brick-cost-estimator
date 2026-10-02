@@ -98,9 +98,35 @@ async function main() {
     '小计应含「张预算表」与「行明细」:' + sumText);
   console.log('✓ 用料明细表:22 行 / 13 列 / 期末结存 / 负数标红 / 小计');
 
+  // ---------- 任务4:剩余材料表(8 列 / 累计与最新批次结存) ----------
+  const stockRows = await evalJS(`document.querySelectorAll('#usage-stock tbody tr').length`);
+  assert(stockRows === 11, '剩余材料表行数应为 11(材料种数),实得 ' + stockRows);
+  const stockHeads = await evalJS(`Array.from(document.querySelectorAll('#usage-stock thead th')).map(function (t) { return t.textContent; })`);
+  assert(stockHeads.length === 8, '剩余材料表应为 8 列,实得 ' + stockHeads.length + ':' + JSON.stringify(stockHeads));
+  assert(stockHeads.some(function (h) { return h.indexOf('最新批次结存') >= 0; }), '表头缺少「最新批次结存」');
+  const stockNeg = await evalJS(`document.querySelectorAll('#usage-stock td.neg').length`);
+  assert(stockNeg >= 1, '剩余材料表应存在负数单元格(td.neg),实得 ' + stockNeg);
+  const srow0 = await evalJS(`(() => {
+    const tr = document.querySelector('#usage-stock tbody tr');
+    if (!tr) return null;
+    return {
+      tds: Array.from(tr.querySelectorAll('td')).map(function (td) { return td.textContent; }),
+      sh: tr.dataset.sh, si: tr.dataset.si, usage: tr.dataset.usage
+    };
+  })()`);
+  assert(srow0, '未取到剩余材料首行');
+  const sTotal = num(srow0.tds[5]);
+  assert(Math.abs(sTotal - (num(srow0.sh) + num(srow0.si) - num(srow0.usage))) < 0.01,
+    '累计剩余应为 累计上存+累计进料−累计用料:' + sTotal + ' vs ' + srow0.sh + '+' + srow0.si + '−' + srow0.usage);
+  const stockText = await evalJS(`document.getElementById('usage-stock').textContent`);
+  assert(stockText.indexOf('NaN') < 0 && stockText.indexOf('undefined') < 0,
+    '剩余材料表不得出现 NaN/undefined');
+  assert(/—|\d/.test(srow0.tds[6]), '最新批次结存列应有值或显示「—」:' + srow0.tds[6]);
+  console.log('✓ 剩余材料表:11 行 / 8 列 / 累计剩余 / 最新批次结存 / 负数标红');
+
   assert(errs.length === 0, '存在 console 错误: ' + errs.join(' | '));
   console.log('✓ 无 console 错误');
-  console.log('\n✅ 用料明细页测试通过(任务2-3)');
+  console.log('\n✅ 用料明细页测试通过(任务2-4)');
   ws.close(); child.kill();
   setTimeout(() => process.exit(0), 100);
 }
