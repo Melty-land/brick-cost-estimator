@@ -25,6 +25,11 @@
   let ovlTo = '';                  // 时间段:结束日期(含)
   let ovlTypes = [];               // 砖型(型号/名称)多选:空=全部
   let ovlMats = [];                // 材料名称多选:空=全部
+  // 用料明细页筛选(与成本总览/图表筛选相互独立)
+  let usageFrom = '';
+  let usageTo = '';
+  let usageTypes = [];             // 产品名(型号)多选:空=全部
+  let usageMats = [];              // 材料名称多选:空=全部
   let ovlCur = 'overview';         // 当前筛选所属页(overview|charts),用于互相跳转时带同一筛选
   // ---- 表格编辑器(Excel 化)状态 ----
   let gridOverF = {};              // 单元格公式覆盖 {addr: '=...'}
@@ -145,6 +150,7 @@
     else if (name === 'estimates') renderEstimates();
     else if (name === 'charts') renderCharts();
     else if (name === 'overview') renderOverview();
+    else if (name === 'usage') renderUsage();
     else if (name === 'compare') renderCompare();
     else if (name === 'users') renderUsers();
   }
@@ -186,7 +192,7 @@
     if (name === 'estimate' && id) { openEstimateEditor(id); return; }
     if (name === 'new-estimate') { openEstimateEditor(null, id); return; }
     if (name === 'editor') { estDraft = null; location.hash = '#estimates'; return; }
-    if (name === 'materials' || name === 'products' || name === 'estimates' || name === 'charts' || name === 'overview' || name === 'compare' || name === 'users') {
+    if (name === 'materials' || name === 'products' || name === 'estimates' || name === 'charts' || name === 'overview' || name === 'usage' || name === 'compare' || name === 'users') {
       switchView(name);
       return;
     }
@@ -1293,6 +1299,38 @@
       chipSel('砖型', 'ovl-type', types, ovlTypes) +
       chipSel('材料', 'ovl-mat', mats, ovlMats) +
     '</div>';
+  }
+
+  // ---------- 用料明细页(逐批逐料明细 + 剩余材料) ----------
+  /** 渲染用料明细页(筛选状态来自 usageFrom/usageTo/usageTypes/usageMats) */
+  function renderUsage() {
+    const v = $('#view-usage');
+    if (!v) return;
+    const res = Stats.buildUsage(data, {
+      from: usageFrom, to: usageTo, types: usageTypes, mats: usageMats
+    });
+    const filterBar = '<div class="ovl-filter"><div class="ovl-row">' +
+      '<span class="ovl-label">' + icon('calendar', 15) + '时间段:</span>' +
+      '<span class="ovl-sep">(下一任务实现)</span></div></div>';
+    v.innerHTML =
+      '<h2 class="sec-title">用料明细</h2>' +
+      '<div class="ovl-toolbar" id="usage-filter">' + filterBar + '</div>' +
+      '<div class="ovl-card" id="usage-detail"></div>' +
+      '<div class="ovl-card" id="usage-stock"></div>';
+    renderUsageDetail(res);
+    renderUsageStock(res);
+  }
+  /** 用料明细表(逐批逐料;含期末结存) */
+  function renderUsageDetail(res) {
+    const box = $('#usage-detail');
+    if (!box) return;
+    box.innerHTML = '<p class="empty-hint">用料明细(下一任务实现):共 ' + res.meta.rowCount + ' 行</p>';
+  }
+  /** 剩余材料表(累计 + 最新批次结存) */
+  function renderUsageStock(res) {
+    const box = $('#usage-stock');
+    if (!box) return;
+    box.innerHTML = '<p class="empty-hint">剩余材料(下一任务实现):共 ' + res.stock.length + ' 种材料</p>';
   }
 
   /** 成本总览页 */
