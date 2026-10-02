@@ -531,3 +531,18 @@ button:not(.primary) .spin { border-color: rgba(0, 0, 0, .25); border-top-color:
   body.printing .sheet-grid { font-size: 11px; }
   @page { size: A4 landscape; margin: 8mm; }
 }
+
+/* ===== 用料明细页(逐批逐料明细 + 剩余材料) ===== */
+.usage-table-wrap { overflow-x: auto; }
+table.usage-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.usage-table th,
+table.usage-table td {
+  border: 1px solid var(--border-strong, #dfe3e8);
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+table.usage-table thead th { background: #f5f6f8; font-weight: 600; color: var(--text-2, #444); }
+table.usage-table tbody tr:nth-child(even) { background: rgba(0, 0, 0, .015); }
+table.usage-table td.num { text-align: right; font-family: var(--font-num, inherit); }
+table.usage-table td.neg { color: #c62828; font-weight: 600; }

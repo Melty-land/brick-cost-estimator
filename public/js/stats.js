@@ -122,7 +122,9 @@
           price: num(r.price),
           amount: amount,
           ratio: num(r.ratio),
-          closing: closing
+          closing: closing,
+          stockOnHand: num(r.stockOnHand),   // 原值,供界面 data 属性与核对
+          stockIn: num(r.stockIn)
         });
       });
 

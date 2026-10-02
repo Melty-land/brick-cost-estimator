@@ -1311,7 +1311,10 @@
     });
     const filterBar = '<div class="ovl-filter"><div class="ovl-row">' +
       '<span class="ovl-label">' + icon('calendar', 15) + '时间段:</span>' +
-      '<span class="ovl-sep">(下一任务实现)</span></div></div>';
+      '<span class="ovl-sep">(下一任务实现)</span>' +
+      '<span class="ovl-count">共 ' + res.meta.estCount + ' 张预算表 / ' + res.meta.rowCount + ' 行明细' +
+        ' / 合计用料 ' + fmt(res.meta.totalKg, 0) + ' 公斤 / 合计金额 ¥' + fmt(res.meta.totalAmount) + '</span>' +
+      '</div></div>';
     v.innerHTML =
       '<h2 class="sec-title">用料明细</h2>' +
       '<div class="ovl-toolbar" id="usage-filter">' + filterBar + '</div>' +
@@ -1320,11 +1323,41 @@
     renderUsageDetail(res);
     renderUsageStock(res);
   }
-  /** 用料明细表(逐批逐料;含期末结存) */
+  /** 用料明细表(逐批逐料;行尾期末结存 = 上存+进料−本期用料) */
   function renderUsageDetail(res) {
     const box = $('#usage-detail');
     if (!box) return;
-    box.innerHTML = '<p class="empty-hint">用料明细(下一任务实现):共 ' + res.meta.rowCount + ' 行</p>';
+    const heads = ['预算表编号', '批次日期', '产品编号', '产品名称', '材料名称', '所属区',
+      '每锅数量(公斤)', '锅数', '本期用料(公斤)', '单价(元/公斤)', '金额(元)', '占比', '期末结存(公斤)'];
+    const head = '<div class="chart-head"><h3>用料明细(逐批逐料)</h3>' +
+      '<span class="chart-note">期末结存 = 上存材料 + 本期进料 − 本期用料(负数标红)</span></div>';
+    if (!res.detail.length) {
+      box.innerHTML = head + '<p class="empty-hint">当前筛选下暂无用料明细。请调整筛选或先创建估算单。</p>';
+      return;
+    }
+    const body = res.detail.map(function (d) {
+      const negCls = d.closing < 0 ? ' neg' : '';
+      return '<tr data-code="' + esc(d.code) + '" data-sh="' + d.stockOnHand + '" data-si="' + d.stockIn +
+        '" data-usage="' + d.usageKg + '">' +
+        '<td>' + esc(d.code) + '</td>' +
+        '<td>' + esc(d.date || '—') + '</td>' +
+        '<td>' + esc(d.productCode || '—') + '</td>' +
+        '<td>' + esc(d.productName) + '</td>' +
+        '<td>' + esc(d.materialName) + '</td>' +
+        '<td>' + esc(d.zone) + '</td>' +
+        '<td class="num">' + fmt(d.qtyPerPot, 2) + '</td>' +
+        '<td class="num">' + fmt(d.pots, 0) + '</td>' +
+        '<td class="num">' + fmt(d.usageKg, 2) + '</td>' +
+        '<td class="num">' + fmt(d.price, 4) + '</td>' +
+        '<td class="num">¥' + fmt(d.amount) + '</td>' +
+        '<td class="num">' + pct(d.ratio) + '</td>' +
+        '<td class="num' + negCls + '">' + fmt(d.closing, 2) + '</td>' +
+        '</tr>';
+    }).join('');
+    box.innerHTML = head +
+      '<div class="usage-table-wrap"><table class="usage-table"><thead><tr>' +
+      heads.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
   /** 剩余材料表(累计 + 最新批次结存) */
   function renderUsageStock(res) {

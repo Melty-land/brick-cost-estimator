@@ -70,9 +70,37 @@ async function main() {
   assert(await evalJS(`!!document.querySelector('#view-usage #usage-stock')`), '缺少 #usage-stock 容器');
   console.log('✓ #usage 路由与视图骨架就绪(#usage-detail / #usage-stock)');
 
+  // ---------- 任务3:用料明细表(13 列 / 期末结存 / 负数标红) ----------
+  const detailRows = await evalJS(`document.querySelectorAll('#usage-detail tbody tr').length`);
+  assert(detailRows === 22, '明细表行数应为 22(e1 11 + e2 11),实得 ' + detailRows);
+  const detailHeads = await evalJS(`Array.from(document.querySelectorAll('#usage-detail thead th')).map(function (t) { return t.textContent; })`);
+  assert(detailHeads.length === 13, '明细表应为 13 列,实得 ' + detailHeads.length + ':' + JSON.stringify(detailHeads));
+  assert(detailHeads.some(function (h) { return h.indexOf('期末结存(公斤)') >= 0; }),
+    '表头缺少「期末结存(公斤)」:' + JSON.stringify(detailHeads));
+  const negCount = await evalJS(`document.querySelectorAll('#usage-detail td.neg').length`);
+  assert(negCount >= 1, '应存在负数结存单元格(td.neg),实得 ' + negCount);
+  const row0 = await evalJS(`(() => {
+    const tr = document.querySelector('#usage-detail tbody tr');
+    if (!tr) return null;
+    return {
+      tds: Array.from(tr.querySelectorAll('td')).map(function (td) { return td.textContent; }),
+      sh: tr.dataset.sh, si: tr.dataset.si, usage: tr.dataset.usage
+    };
+  })()`);
+  assert(row0, '未取到明细首行');
+  const cQty = num(row0.tds[6]), cPots = num(row0.tds[7]), cUsage = num(row0.tds[8]), cClosing = num(row0.tds[12]);
+  assert(Math.abs(cUsage - cQty * cPots) < 0.01,
+    '第 9 列(本期用料)应为第 7 列×第 8 列:' + cUsage + ' vs ' + cQty + '×' + cPots);
+  assert(Math.abs(cClosing - (num(row0.sh) + num(row0.si) - num(row0.usage))) < 0.01,
+    '第 13 列(期末结存)应为 上存+进料−用料:' + cClosing + ' vs ' + row0.sh + '+' + row0.si + '−' + row0.usage);
+  const sumText = await evalJS(`(document.querySelector('#usage-filter') || {}).textContent || ''`);
+  assert(sumText.indexOf('张预算表') >= 0 && sumText.indexOf('行明细') >= 0,
+    '小计应含「张预算表」与「行明细」:' + sumText);
+  console.log('✓ 用料明细表:22 行 / 13 列 / 期末结存 / 负数标红 / 小计');
+
   assert(errs.length === 0, '存在 console 错误: ' + errs.join(' | '));
   console.log('✓ 无 console 错误');
-  console.log('\n✅ 用料明细页测试通过(任务2)');
+  console.log('\n✅ 用料明细页测试通过(任务2-3)');
   ws.close(); child.kill();
   setTimeout(() => process.exit(0), 100);
 }
