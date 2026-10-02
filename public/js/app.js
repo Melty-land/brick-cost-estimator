@@ -1302,6 +1302,59 @@
   }
 
   // ---------- 用料明细页(逐批逐料明细 + 剩余材料) ----------
+  /** 用料明细页:可选产品名列表(全部产品的名称,去重保序) */
+  function usageAllTypes() {
+    const seen = {}, out = [];
+    (data.products || []).forEach(function (p) {
+      const n = p.name || '';
+      if (n && !seen[n]) { seen[n] = 1; out.push(n); }
+    });
+    return out;
+  }
+  /** 用料明细页:可选材料名列表(材料档案名称,去重保序) */
+  function usageAllMats() {
+    const seen = {}, out = [];
+    (data.materials || []).forEach(function (m) {
+      const n = m.name || '';
+      if (n && !seen[n]) { seen[n] = 1; out.push(n); }
+    });
+    (data.estimates || []).forEach(function (e) {
+      (e.rows || []).forEach(function (r) {
+        const n = r.name || '';
+        if (n && !seen[n]) { seen[n] = 1; out.push(n); }
+      });
+    });
+    return out;
+  }
+  /** 用料明细页筛选条(语义与成本总览一致:默认全部;点哪个选哪个) */
+  function usageFilterBarHTML(res) {
+    const types = usageAllTypes(), mats = usageAllMats();
+    const chipSel = function (title, name, list, selArr) {
+      return '<div class="ovl-field"><span class="ovl-label">' + esc(title) + '</span><div class="ovl-chips">' +
+        '<label class="ovl-chip-all"><input type="checkbox" class="ovl-all" data-group="' + name + '"' +
+          (selArr.length === 0 ? ' checked' : '') + '>全部</label>' +
+        list.map(function (x) {
+          return '<label class="ovl-chip"><input type="checkbox" name="' + name + '" value="' + esc(x) + '"' +
+            (selArr.indexOf(x) >= 0 ? ' checked' : '') + '>' + esc(x) + '</label>';
+        }).join('') + '</div></div>';
+    };
+    const hasFilter = !!(usageFrom || usageTo || usageTypes.length || usageMats.length);
+    return '<div class="ovl-filter">' +
+      '<div class="ovl-row">' +
+        '<span class="ovl-label">' + icon('calendar', 15) + '时间段:</span>' +
+        '<input type="date" id="usage-from" value="' + esc(usageFrom) + '">' +
+        '<span class="ovl-sep">至</span>' +
+        '<input type="date" id="usage-to" value="' + esc(usageTo) + '">' +
+        (hasFilter ? '<button class="small" data-action="usage-clear">清除</button>' : '') +
+        '<span class="ovl-count">共 ' + res.meta.estCount + ' 张预算表 / ' + res.meta.rowCount + ' 行明细' +
+          ' / 合计用料 ' + fmt(res.meta.totalKg, 0) + ' 公斤 / 合计金额 ¥' + fmt(res.meta.totalAmount) + '</span>' +
+        '<button class="small" data-action="usage-export-detail">' + btnIcon('download', '导出明细') + '</button>' +
+        '<button class="small" data-action="usage-export-stock">' + btnIcon('download', '导出剩余材料') + '</button>' +
+      '</div>' +
+      chipSel('产品', 'usage-type', types, usageTypes) +
+      chipSel('材料', 'usage-mat', mats, usageMats) +
+    '</div>';
+  }
   /** 渲染用料明细页(筛选状态来自 usageFrom/usageTo/usageTypes/usageMats) */
   function renderUsage() {
     const v = $('#view-usage');
@@ -1309,19 +1362,24 @@
     const res = Stats.buildUsage(data, {
       from: usageFrom, to: usageTo, types: usageTypes, mats: usageMats
     });
-    const filterBar = '<div class="ovl-filter"><div class="ovl-row">' +
-      '<span class="ovl-label">' + icon('calendar', 15) + '时间段:</span>' +
-      '<span class="ovl-sep">(下一任务实现)</span>' +
-      '<span class="ovl-count">共 ' + res.meta.estCount + ' 张预算表 / ' + res.meta.rowCount + ' 行明细' +
-        ' / 合计用料 ' + fmt(res.meta.totalKg, 0) + ' 公斤 / 合计金额 ¥' + fmt(res.meta.totalAmount) + '</span>' +
-      '</div></div>';
     v.innerHTML =
       '<h2 class="sec-title">用料明细</h2>' +
-      '<div class="ovl-toolbar" id="usage-filter">' + filterBar + '</div>' +
+      '<div class="ovl-toolbar" id="usage-filter">' + usageFilterBarHTML(res) + '</div>' +
       '<div class="ovl-card" id="usage-detail"></div>' +
       '<div class="ovl-card" id="usage-stock"></div>';
     renderUsageDetail(res);
     renderUsageStock(res);
+  }
+  /** 导出用料明细页的某张表(复用现有 Exporter.exportXLS) */
+  function exportUsageTable(which) {
+    const tableEl = document.querySelector('#usage-' + which + ' table');
+    if (!tableEl) { toast('没有可导出的数据'); return; }
+    const d = new Date();
+    const stamp = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const title = which === 'detail' ? '用料明细' : '剩余材料';
+    Promise.resolve(Exporter.exportXLS(title + '-' + stamp, tableEl, title))
+      .then(function (ok) { if (ok !== false) toast('已导出:' + title + '-' + stamp + '.xls'); })
+      .catch(function () { toast('导出失败'); });
   }
   /** 用料明细表(逐批逐料;行尾期末结存 = 上存+进料−本期用料) */
   function renderUsageDetail(res) {
@@ -1740,9 +1798,54 @@
       rerenderOvlCurrent();
       return;
     }
+    // 用料明细页筛选:日期 / 多选(语义与成本总览一致)
+    if (el.id === 'usage-from' || el.id === 'usage-to') {
+      const f = $('#usage-from'), t = $('#usage-to');
+      const fv = f ? f.value : '', tv = t ? t.value : '';
+      if (fv && tv && fv > tv) {
+        toast('开始日期不能晚于结束日期');
+        if (el.id === 'usage-from') { f.value = usageFrom; } else { t.value = usageTo; }
+        return;
+      }
+      usageFrom = fv; usageTo = tv;
+      withScrollKept(renderUsage);
+      return;
+    }
+    if (el.matches('input.ovl-all[data-group="usage-type"]')) {
+      usageTypes = el.checked ? [] : usageAllTypes();
+      withScrollKept(renderUsage);
+      return;
+    }
+    if (el.matches('input.ovl-all[data-group="usage-mat"]')) {
+      usageMats = el.checked ? [] : usageAllMats();
+      withScrollKept(renderUsage);
+      return;
+    }
+    if (el.matches('input[name="usage-type"]')) {
+      usageTypes = Array.from(document.querySelectorAll('input[name="usage-type"]:checked')).map(function (x) { return x.value; });
+      withScrollKept(renderUsage);
+      return;
+    }
+    if (el.matches('input[name="usage-mat"]')) {
+      usageMats = Array.from(document.querySelectorAll('input[name="usage-mat"]:checked')).map(function (x) { return x.value; });
+      withScrollKept(renderUsage);
+      return;
+    }
   });
 
   document.addEventListener('click', function (e) {
+    // 用料明细页:清除筛选与两表导出
+    const usageClear = e.target.closest('[data-action="usage-clear"]');
+    if (usageClear) {
+      usageFrom = ''; usageTo = ''; usageTypes = []; usageMats = [];
+      withScrollKept(renderUsage);
+      return;
+    }
+    const usageExp = e.target.closest('[data-action="usage-export-detail"], [data-action="usage-export-stock"]');
+    if (usageExp) {
+      exportUsageTable(usageExp.dataset.action === 'usage-export-detail' ? 'detail' : 'stock');
+      return;
+    }
     // 图表联动:点击柱子/数据点/环形段 → 打开对应估算单
     const chartOpen = e.target.closest('[data-chart-open]');
     if (chartOpen) { navigate('#estimate/' + chartOpen.dataset.chartOpen); return; }

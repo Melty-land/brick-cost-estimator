@@ -124,9 +124,61 @@ async function main() {
   assert(/—|\d/.test(srow0.tds[6]), '最新批次结存列应有值或显示「—」:' + srow0.tds[6]);
   console.log('✓ 剩余材料表:11 行 / 8 列 / 累计剩余 / 最新批次结存 / 负数标红');
 
+  // ---------- 任务5:筛选条、空数据路径与导出 ----------
+  const setDate = (id, val) => evalJS(`(() => {
+    const el = document.getElementById('${id}');
+    if (!el) return false;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, '${val}');
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  const detailCount = () => evalJS(`document.querySelectorAll('#usage-detail tbody tr').length`);
+  const clearUsage = async () => { await evalJS(`(() => { const b = document.querySelector('[data-action="usage-clear"]'); if (b) b.click(); })()`); await sleep(400); };
+
+  assert(await setDate('usage-from', '2026-10-01'), '未找到 #usage-from 日期输入');
+  await sleep(400);
+  let r5 = await detailCount();
+  assert(r5 === 11, '时间段筛选(≥2026-10-01)后明细应为 11 行(只剩 e2),实得 ' + r5);
+  await clearUsage();
+  r5 = await detailCount();
+  assert(r5 === 22, '点「清除」后明细应回到 22 行,实得 ' + r5);
+  console.log('✓ 时间段筛选与清除');
+
+  await setDate('usage-from', '2026-01-01');
+  await setDate('usage-to', '2026-01-02');
+  await sleep(400);
+  const emptyText = await evalJS(`document.getElementById('usage-detail').textContent + '|' + document.getElementById('usage-stock').textContent`);
+  assert(emptyText.indexOf('暂无') >= 0, '空结果时两表应显示「暂无」提示:' + emptyText.slice(0, 140));
+  await clearUsage();
+  r5 = await detailCount();
+  assert(r5 === 22, '空数据清除筛选后应恢复 22 行,实得 ' + r5);
+  console.log('✓ 空数据路径显示空提示并可恢复(任务3 第6条)');
+
+  assert(await evalJS(`(() => {
+    const inp = Array.from(document.querySelectorAll('#usage-filter input[name="usage-mat"]')).filter(function (i) { return i.value === '黑水泥'; })[0];
+    if (!inp) return false;
+    inp.click();
+    return true;
+  })()`), '未找到材料 chip「黑水泥」');
+  await sleep(450);
+  const matNames = await evalJS(`Array.from(document.querySelectorAll('#usage-detail tbody tr')).map(function (tr) { return tr.children[4].textContent; })`);
+  assert(matNames.length > 0 && matNames.every(function (n) { return n === '黑水泥'; }),
+    '材料单选后明细应只含黑水泥,实得 ' + JSON.stringify(matNames.slice(0, 5)));
+  const stockRows5 = await evalJS(`document.querySelectorAll('#usage-stock tbody tr').length`);
+  assert(stockRows5 === 1, '材料单选后剩余材料表应为 1 行,实得 ' + stockRows5);
+  const s5 = await evalJS(`(() => { const tr = document.querySelector('#usage-stock tbody tr'); return tr ? { cell: tr.children[4].textContent, usage: tr.dataset.usage } : null; })()`);
+  assert(s5 && Math.abs(num(s5.cell) - num(s5.usage)) < 0.01,
+    '剩余材料累计用料应与行内 data-usage 一致:' + JSON.stringify(s5));
+  assert(await evalJS(`!!document.querySelector('[data-action="usage-export-detail"]') && !!document.querySelector('[data-action="usage-export-stock"]')`),
+    '缺少两表导出按钮');
+  await evalJS(`document.querySelector('[data-action="usage-export-detail"]').click()`);
+  await sleep(300);
+  console.log('✓ 材料单选(只含黑水泥 / 剩余表 1 行 / 累计用料自洽)与导出按钮');
+
   assert(errs.length === 0, '存在 console 错误: ' + errs.join(' | '));
   console.log('✓ 无 console 错误');
-  console.log('\n✅ 用料明细页测试通过(任务2-4)');
+  console.log('\n✅ 用料明细页测试通过(任务2-5)');
   ws.close(); child.kill();
   setTimeout(() => process.exit(0), 100);
 }
