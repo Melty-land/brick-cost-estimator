@@ -192,6 +192,7 @@ node test/cdp-grid-test.cjs    # 浏览器表格编辑器
 node test/cdp-trace-test.cjs   # 引用追踪高亮(公式影响链)
 node test/cdp-layout-check.cjs # 材料清单 9 列版式 + 导出 12 列对齐
 node test/cdp-overview-check.cjs # 成本总览/筛选/跨批次图表/上存跨批结转
+node test/cdp-nav-scroll-test.cjs # favicon 204/退出与再进入(hash 不同步)/点击不跳顶
 node test/cdp-rules-test.cjs   # 必填/草稿/退出弹窗/相邻校验
 node test/cdp-crud-test.cjs    # 浏览器 CRUD
 node test/cdp-charts-test.cjs  # 浏览器图表

@@ -454,6 +454,12 @@ function serveStatic(req, res, urlPath) {
   let p;
   try { p = decodeURIComponent(urlPath); } catch (e) { p = urlPath; }
   if (p === '/' || p === '\\' || p === '') p = '/index.html';
+  // 浏览器会主动请求 /favicon.ico(即便页面已内联 data URI 图标),返回 204 避免控制台 404 报错
+  if (p === '/favicon.ico') {
+    res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' });
+    res.end();
+    return;
+  }
   const file = path.normalize(path.join(PUBLIC, p));
   if (file !== PUBLIC && !file.startsWith(PUBLIC + path.sep)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });

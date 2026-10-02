@@ -133,7 +133,7 @@
   function switchView(name) {
     if (name === 'users' && (!currentUser || currentUser.role !== 'admin')) {
       toast('仅管理员可访问用户管理');
-      location.hash = '#estimates';
+      navigate('#estimates');
       return;
     }
     currentView = name;
@@ -150,6 +150,17 @@
   }
 
   let lastEditorHash = null; // 记录当前编辑的估算单 hash(用于 hashchange 脏守卫还原)
+  /**
+   * 统一导航:目标 hash 与当前地址相同时浏览器不会触发 hashchange,
+   * 若此时视图与 hash 不同步(如上次打开失败、深链异常),"点击"会毫无反应。
+   * 这里显式重放一次路由,保证每次点击都生效。
+   */
+  function navigate(target) {
+    if (!target) return;
+    const t = String(target).charAt(0) === '#' ? String(target) : '#' + String(target);
+    if (location.hash === t) { applyHash(); return; }
+    location.hash = t;
+  }
   /** 根据 location.hash 切换视图:#materials / #products / #estimates / #compare / #users / #estimate/<id> / #new-estimate[/<产品id>] */
   function applyHash() {
     // 未登录或数据未加载(登出/会话过期后 hash 变化)时不渲染业务视图
@@ -194,7 +205,7 @@
       } catch (e) { /* 忽略 */ }
       ovlCur = target;
       if (target === 'charts') { lastChartsSig = null; }
-      location.hash = '#' + target; // 规整为常规 hash,再渲染目标视图
+      location.hash = '#' + target; // 规整为常规 hash,再渲染目标视图(此处 hash 必然不同:#ovl-* → #charts/#overview)
       return;
     }
     switchView('materials');
@@ -590,6 +601,7 @@
 
 
   function renderEstimateEditor() {
+    const keepScroll = scrollSnapshot(); // 整表重绘前记录滚动,避免跳回顶部
     const v = $('#view-editor');
     const d = estDraft;
     gridEval();
@@ -645,6 +657,8 @@
     paintAll(gridCache);
     gridSel = null;
     updateFxBar();
+    scrollRestore(keepScroll);
+    requestAnimationFrame(function () { scrollRestore(keepScroll); });
   }
 
   // ---------- 表格(Excel 化)求值与绘制 ----------
@@ -774,11 +788,46 @@
     const raw = getPath(estDraft, def.path);
     return raw === null || raw === undefined ? '' : String(raw);
   }
+  // ---------- 滚动保持(点击单元格/整表重绘后不跳回顶部) ----------
+  /** 记录文档与表格横向容器的滚动位置 */
+  function scrollSnapshot() {
+    const box = document.querySelector('#view-editor .sheet-scroll');
+    return {
+      y: window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || 0,
+      x: window.scrollX || 0,
+      box: box,
+      bx: box ? box.scrollLeft : 0,
+      by: box ? box.scrollTop : 0
+    };
+  }
+  /** 恢复滚动位置:聚焦/重绘可能使浏览器滚动到顶部,这里拉回原处 */
+  function scrollRestore(s) {
+    if (!s) return;
+    const se = document.scrollingElement || document.documentElement;
+    if (Math.abs((window.scrollY || 0) - s.y) > 1) {
+      window.scrollTo(s.x, s.y);
+    } else if (se && Math.abs(se.scrollTop - s.y) > 1) {
+      se.scrollTop = s.y;
+    }
+    if (s.box && s.box.isConnected) {
+      s.box.scrollLeft = s.bx;
+      s.box.scrollTop = s.by;
+    }
+  }
+  /** 执行 fn 并保持滚动位置(同步 + 下一帧兜底,覆盖浏览器异步滚动) */
+  function withScrollKept(fn) {
+    const snap = scrollSnapshot();
+    fn();
+    scrollRestore(snap);
+    requestAnimationFrame(function () { scrollRestore(snap); });
+  }
   function selectCell(addr) {
-    commitFx();
-    gridSel = addr;
-    updateFxBar();
-    repaintSel();
+    withScrollKept(function () {
+      commitFx();
+      gridSel = addr;
+      updateFxBar();
+      repaintSel();
+    });
   }
   function repaintSel() {
     const v = $('#view-editor');
@@ -1118,8 +1167,8 @@
       Store.save().then(function () {
         savedAutoDraft();
         toast((status === 'ready' ? '已保存为可用表格' : '已保存为草稿') + (asCopy ? '(副本)' : ''));
-        if (after) location.hash = after;
-        else location.hash = '#estimates';
+        if (after) navigate(after);
+        else navigate('#estimates');
       }).catch(function (err) {
         toast('保存失败:' + (err && err.message ? err.message : '请重试'));
         if (err && (err.status === 401 || err.status === 403)) handleAuthExpired();
@@ -1188,7 +1237,8 @@
     gridCache = null;
     gridPendingNav = null;
     markClean(); // 离开编辑器(discard 等)清本地草稿与 dirty
-    location.hash = hashTarget;
+    // 用 navigate:若地址 hash 与目标相同(视图/hash 不同步)也能真正切走
+    navigate(hashTarget);
   }
   function exitChoice(kind) {
     const target = gridPendingNav || '#estimates';
@@ -1598,7 +1648,7 @@
   document.addEventListener('click', function (e) {
     // 图表联动:点击柱子/数据点/环形段 → 打开对应估算单
     const chartOpen = e.target.closest('[data-chart-open]');
-    if (chartOpen) { location.hash = '#estimate/' + chartOpen.dataset.chartOpen; return; }
+    if (chartOpen) { navigate('#estimate/' + chartOpen.dataset.chartOpen); return; }
     // 图表联动:材料汇总切换 按金额/按用量
     const modeBtn = e.target.closest('[data-mode]');
     if (modeBtn && modeBtn.closest('#chart-mat-mode')) {
@@ -1629,9 +1679,9 @@
           sessionStorage.setItem('ovlFilter', JSON.stringify({ from: ovlFrom, to: ovlTo, types: ovlTypes, mats: ovlMats }));
         } catch (e) { /* 隐私模式等场景忽略 */ }
         const url = location.pathname + location.search + '#ovl-' + target + '?f=1';
-        if (e && e.shiftKey) { location.hash = '#' + (target === 'charts' ? 'ovl-charts' : 'ovl-overview'); }
+        if (e && e.shiftKey) { navigate('#' + (target === 'charts' ? 'ovl-charts' : 'ovl-overview')); }
         else {
-          try { window.open(url, '_blank'); } catch (err) { location.hash = '#' + (target === 'charts' ? 'ovl-charts' : 'ovl-overview'); }
+          try { window.open(url, '_blank'); } catch (err) { navigate('#' + (target === 'charts' ? 'ovl-charts' : 'ovl-overview')); }
         }
         break;
       }
@@ -1714,11 +1764,11 @@
         break;
       case 'new-estimate': {
         const pid = $('#new-est-prod').value;
-        location.hash = '#new-estimate/' + pid;
+        navigate('#new-estimate/' + pid);
         break;
       }
       case 'view-estimate':
-        location.hash = '#estimate/' + id;
+        navigate('#estimate/' + id);
         break;
       case 'clone-estimate':
         Store.cloneEstimate(id);
@@ -2013,12 +2063,12 @@
     const td = e.target.closest && e.target.closest('td[data-addr]');
     if (!td || !v.contains(td)) return;
     if (td.dataset.editable) selectCell(td.dataset.addr);
-    else { commitFx(); gridSel = null; updateFxBar(); repaintSel(); }
+    else withScrollKept(function () { commitFx(); gridSel = null; updateFxBar(); repaintSel(); });
   });
   document.addEventListener('keydown', function (e) {
     const inputEl = $('#fx-input');
     if (!inputEl || inputEl.disabled || document.activeElement !== inputEl) return;
-    if (e.key === 'Enter') { commitFx(); }
+    if (e.key === 'Enter') { withScrollKept(commitFx); }
     else if (e.key === 'Escape') { updateFxBar(); }
   });
 
