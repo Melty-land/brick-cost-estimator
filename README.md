@@ -181,6 +181,8 @@ node test/calc.test.cjs        # 计算单元测试
 node test/formula.test.cjs     # 公式引擎单元测试
 node test/sheet.test.cjs       # 表格默认公式一致性
 node test/exporter.test.cjs    # Excel 导出(SpreadsheetML)单元测试
+node test/data-audit.cjs       # 数据审计(字段/公式口径/量级;需服务在跑)
+node test/mock-demo.cjs        # 组装 5 组模拟砖型数据(幂等,手动运行)
 node test/seed-demo.cjs        # 重置演示数据(材料 11 + 产品 1 + 估算单 2)
 node test/auth-api-check.cjs   # 服务端鉴权冒烟(注册/登录/越权)
 node test/auth-perm-check.cjs  # 权限细节(停用踢下线/自保护/最后管理员)

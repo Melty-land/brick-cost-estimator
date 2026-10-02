@@ -40,25 +40,25 @@ const PRICE = { '黑水泥': 0.26, '白水泥': 0.42, '3-6': 0.07, '5-10': 0.07,
 // 每组:[砖型id, 批次列表:[{code,name,date,potB,potT,sh,si,calc}]]
 const BATCHES = [
   { pid: 'mprod-dk', batches: [
-    { code: 'DK-001', name: '多孔砖 240×115×90 2026-07-10', date: '2026-07-10', potB: 40, potT: 15, sh: 200, si: 120, calc: { length: 240, width: 115, height: 90, perPieceWeight: 3.2, perModuleCount: 24, moldManual: 6, perPalletCount: 300, perPalletSqm: 8.28, actualCount: 9000 } },
-    { code: 'DK-002', name: '多孔砖 240×115×90 2026-08-12', date: '2026-08-12', potB: 45, potT: 16, sh: 100, si: 200, calc: { length: 240, width: 115, height: 90, perPieceWeight: 3.2, perModuleCount: 24, moldManual: 6, perPalletCount: 300, perPalletSqm: 8.28, actualCount: 9500 } },
-    { code: 'DK-003', name: '多孔砖 240×115×90 2026-09-08', date: '2026-09-08', potB: 50, potT: 18, sh: 60, si: 220, calc: { length: 240, width: 115, height: 90, perPieceWeight: 3.2, perModuleCount: 24, moldManual: 6, perPalletCount: 300, perPalletSqm: 8.28, actualCount: 10000 } }
+    { code: 'DK-001', name: '多孔砖 240×115×90 2026-07-10', date: '2026-07-10', potB: 40, potT: 15, sh: 200, si: 120, factor: 0.96, calc: { length: 240, width: 115, height: 90, perPieceWeight: 3.2, perModuleCount: 24, moldManual: 6, perPalletCount: 300, perPalletSqm: 8.28, actualCount: 9000 } },
+    { code: 'DK-002', name: '多孔砖 240×115×90 2026-08-12', date: '2026-08-12', potB: 45, potT: 16, sh: 100, si: 200, factor: 1.02, calc: { length: 240, width: 115, height: 90, perPieceWeight: 3.2, perModuleCount: 24, moldManual: 6, perPalletCount: 300, perPalletSqm: 8.28, actualCount: 9500 } },
+    { code: 'DK-003', name: '多孔砖 240×115×90 2026-09-08', date: '2026-09-08', potB: 50, potT: 18, sh: 60, si: 220, factor: 0.99, calc: { length: 240, width: 115, height: 90, perPieceWeight: 3.2, perModuleCount: 24, moldManual: 6, perPalletCount: 300, perPalletSqm: 8.28, actualCount: 10000 } }
   ] },
   { pid: 'mprod-ts', batches: [
-    { code: 'TS-101', name: '透水砖 300×150×60 2026-07-05', date: '2026-07-05', potB: 60, potT: 20, sh: 300, si: 150, calc: { length: 300, width: 150, height: 60, perPieceWeight: 5.16, perModuleCount: 18, moldManual: 8, perPalletCount: 384, perPalletSqm: 17.28, actualCount: 5000 } },
-    { code: 'TS-102', name: '透水砖 300×150×60 2026-10-02', date: '2026-10-02', potB: 65, potT: 22, sh: 120, si: 260, calc: { length: 300, width: 150, height: 60, perPieceWeight: 5.16, perModuleCount: 18, moldManual: 8, perPalletCount: 384, perPalletSqm: 17.28, actualCount: 5200 } }
+    { code: 'TS-101', name: '透水砖 300×150×60 2026-07-05', date: '2026-07-05', potB: 60, potT: 20, sh: 300, si: 150, factor: 0.98, calc: { length: 300, width: 150, height: 60, perPieceWeight: 5.16, perModuleCount: 18, moldManual: 8, perPalletCount: 384, perPalletSqm: 17.28, actualCount: 5000 } },
+    { code: 'TS-102', name: '透水砖 300×150×60 2026-10-02', date: '2026-10-02', potB: 65, potT: 22, sh: 120, si: 260, factor: 1.01, calc: { length: 300, width: 150, height: 60, perPieceWeight: 5.16, perModuleCount: 18, moldManual: 8, perPalletCount: 384, perPalletSqm: 17.28, actualCount: 5200 } }
   ] },
   { pid: 'mprod-ly', batches: [
-    { code: 'LY-201', name: '路缘石 500×150×200 2026-08-01', date: '2026-08-01', potB: 25, potT: 10, sh: 500, si: 200, calc: { length: 500, width: 150, height: 200, perPieceWeight: 30, perModuleCount: 6, moldManual: 10, perPalletCount: 60, perPalletSqm: 0.225, actualCount: 800 } },
-    { code: 'LY-202', name: '路缘石 500×150×200 2026-11-15', date: '2026-11-15', potB: 28, potT: 12, sh: 300, si: 250, calc: { length: 500, width: 150, height: 200, perPieceWeight: 30, perModuleCount: 6, moldManual: 10, perPalletCount: 60, perPalletSqm: 0.225, actualCount: 850 } }
+    { code: 'LY-201', name: '路缘石 500×150×200 2026-08-01', date: '2026-08-01', potB: 25, potT: 10, sh: 500, si: 200, factor: 0.97, calc: { length: 500, width: 150, height: 200, perPieceWeight: 30, perModuleCount: 6, moldManual: 10, perPalletCount: 60, perPalletSqm: 0.225, actualCount: 800 } },
+    { code: 'LY-202', name: '路缘石 500×150×200 2026-11-15', date: '2026-11-15', potB: 28, potT: 12, sh: 300, si: 250, factor: 1, calc: { length: 500, width: 150, height: 200, perPieceWeight: 30, perModuleCount: 6, moldManual: 10, perPalletCount: 60, perPalletSqm: 0.225, actualCount: 850 } }
   ] },
   { pid: 'mprod-zc', batches: [
-    { code: 'ZC-301', name: '植草砖 400×300×80 2026-09-20', date: '2026-09-20', potB: 35, potT: 12, sh: 400, si: 180, calc: { length: 400, width: 300, height: 80, perPieceWeight: 12, perModuleCount: 8, moldManual: 4, perPalletCount: 120, perPalletSqm: 0.96, actualCount: 2000 } },
-    { code: 'ZC-302', name: '植草砖 400×300×80 2026-12-05', date: '2026-12-05', potB: 38, potT: 14, sh: 150, si: 300, calc: { length: 400, width: 300, height: 80, perPieceWeight: 12, perModuleCount: 8, moldManual: 4, perPalletCount: 120, perPalletSqm: 0.96, actualCount: 2100 } }
+    { code: 'ZC-301', name: '植草砖 400×300×80 2026-09-20', date: '2026-09-20', potB: 35, potT: 12, sh: 400, si: 180, factor: 0.99, calc: { length: 400, width: 300, height: 80, perPieceWeight: 12, perModuleCount: 8, moldManual: 4, perPalletCount: 120, perPalletSqm: 0.96, actualCount: 2000 } },
+    { code: 'ZC-302', name: '植草砖 400×300×80 2026-12-05', date: '2026-12-05', potB: 38, potT: 14, sh: 150, si: 300, factor: 1.03, calc: { length: 400, width: 300, height: 80, perPieceWeight: 12, perModuleCount: 8, moldManual: 4, perPalletCount: 120, perPalletSqm: 0.96, actualCount: 2100 } }
   ] },
   { pid: 'mprod-ls', batches: [
-    { code: 'LS-401', name: '连锁块 200×100×60 2026-10-10', date: '2026-10-10', potB: 55, potT: 20, sh: 80, si: 300, calc: { length: 200, width: 100, height: 60, perPieceWeight: 2.4, perModuleCount: 40, moldManual: 6, perPalletCount: 500, perPalletSqm: 1.2, actualCount: 6000 } },
-    { code: 'LS-402', name: '连锁块 200×100×60 2026-12-18', date: '2026-12-18', potB: 60, potT: 24, sh: 200, si: 350, calc: { length: 200, width: 100, height: 60, perPieceWeight: 2.4, perModuleCount: 40, moldManual: 6, perPalletCount: 500, perPalletSqm: 1.2, actualCount: 6500 } }
+    { code: 'LS-401', name: '连锁块 200×100×60 2026-10-10', date: '2026-10-10', potB: 55, potT: 20, sh: 80, si: 300, factor: 0.98, calc: { length: 200, width: 100, height: 60, perPieceWeight: 2.4, perModuleCount: 40, moldManual: 6, perPalletCount: 500, perPalletSqm: 1.2, actualCount: 6000 } },
+    { code: 'LS-402', name: '连锁块 200×100×60 2026-12-18', date: '2026-12-18', potB: 60, potT: 24, sh: 200, si: 350, factor: 1, calc: { length: 200, width: 100, height: 60, perPieceWeight: 2.4, perModuleCount: 40, moldManual: 6, perPalletCount: 500, perPalletSqm: 1.2, actualCount: 6500 } }
   ] }
 ];
 
@@ -69,13 +69,22 @@ async function main() {
   const M = {};
   cur.materials.forEach((m) => { M[m.name] = m; });
 
-  // 用户真实单 estimate3 与产品 product2 兜底(若当前库被 seed-demo 覆盖则补回)
+  // 用户真实单 estimate3 与产品 product2 兜底(被 seed-demo / 测试单顶替时替换回真实数据)
   const ucPath = path.join(__dirname, '..', 'data', '.userdata-cache.json');
   if (fs.existsSync(ucPath)) {
     const uc = JSON.parse(fs.readFileSync(ucPath, 'utf8'));
-    const e3 = uc.estimates.find((x) => x.id === 'estimate3');
+    const e3 = uc.estimates.find((x) => x.id === 'estimate3' && (x.rows || []).length > 0);
     const p2 = uc.products.find((x) => x.id === 'product2');
-    if (e3 && !cur.estimates.some((x) => x.id === 'estimate3')) cur.estimates.push(JSON.parse(JSON.stringify(e3)));
+    if (e3) {
+      // 同 id 若是测试残留(材料行数不同/为空),移除后放入真实数据
+      cur.estimates.filter((x) => x.id === 'estimate3').forEach((x) => {
+        if ((x.rows || []).length !== (e3.rows || []).length || !(x.rows || []).length) {
+          console.log('  清理顶替单: ' + x.id + ' ' + (x.name || ''));
+        }
+      });
+      cur.estimates = cur.estimates.filter((x) => x.id !== 'estimate3');
+      cur.estimates.push(JSON.parse(JSON.stringify(e3)));
+    }
     if (p2 && !cur.products.some((x) => x.id === 'product2')) cur.products.push(JSON.parse(JSON.stringify(p2)));
   }
 
@@ -96,18 +105,29 @@ async function main() {
   // 估算单(幂等:按 code 跳过)
   const estCodes = new Set(cur.estimates.map((e) => e.code));
   BATCHES.forEach((g) => {
+    const prod = PRODUCTS.find((p) => p.id === g.pid);
     g.batches.forEach((b) => {
       if (estCodes.has(b.code)) return;
-      const rows = PRODUCTS.find((p) => p.id === g.pid).recipe.map(([name, qty]) => {
+      const rows = prod.recipe.map(([name, qty]) => {
         const m = M[name];
         return { id: uid(), materialId: m.id, name: m.name, zone: m.zone, qtyPerPot: qty, price: PRICE[name] || 0.1, stockOnHand: b.sh, stockIn: b.si, qty: 0 };
       });
+      // ---- 量级自洽计算:用料 → 块数 → 模数 → 计划面积 → 实际面积 ----
+      const sumPot = (zone) => prod.recipe.reduce((s, [name, qty]) => s + (M[name].zone === zone ? qty : 0), 0);
+      const usageKg = sumPot('底料') * b.potB + sumPot('面料') * b.potT;
+      const area1 = b.calc.length * b.calc.width / 1e6;             // 单砖面积 m²
+      const blocks = usageKg / b.calc.perPieceWeight;                // 理论块数
+      const moldManual = Math.max(1, Math.round(blocks / b.calc.perModuleCount)); // 模数(手工)
+      const planCount = moldManual * b.calc.perModuleCount * area1;  // 计划面积 m²
+      const actualCount = Math.round(planCount * (b.factor || 1) * 100) / 100;     // 实际数 = 面积 m²
+      const calc = Object.assign({
+        perSqmWeight: '', perCubicWeight: '', perPalletWeight: '', planCount: '', yieldRate: '', tonPrice: '', perSqmPrice: ''
+      }, b.calc, { moldManual: moldManual, startMold: 1, endMold: moldManual, actualCount: actualCount });
       const est = {
         id: 'mock-' + b.code.toLowerCase().replace(/[^a-z0-9]/g, ''),
         productId: g.pid, status: 'ready', name: b.name, code: b.code,
         startDate: b.date, endDate: b.date, author: 'admin',
-        potBottom: b.potB, potTop: b.potT, rows: rows,
-        calc: Object.assign({ perPieceWeight: '', perModuleCount: '', moldManual: 5, perPalletCount: '', perPalletSqm: '', actualCount: '', startMold: 1, endMold: 5, perSqmWeight: '', perCubicWeight: '', perPalletWeight: '', planCount: '', yieldRate: '', tonPrice: '', perSqmPrice: '' }, b.calc)
+        potBottom: b.potB, potTop: b.potT, rows: rows, calc: calc
       };
       // derive 回写(等同编辑器保存)
       const res = Sheet.evaluate(est, { f: {}, v: {} });

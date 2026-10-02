@@ -260,28 +260,30 @@
     r = addRow();
     // 每块重量/每模块数/模数(手工)/每托块数 为手动;每平方重量、每立方重量按公式自动
     var perPiece = getByPath(est, 'calc.perPieceWeight');
-    place(r, 0, lab(0, r, '每块重量(kg)', 'lab', 1));
+    place(r, 0, lab(0, r, '每块重量(公斤)', 'lab', 1));
     place(r, 1, inp(1, r, 'calc.perPieceWeight', numOrBlank(perPiece), 'num', 1));
     place(r, 2, lab(2, r, '每模块数', 'lab', 1));
     place(r, 3, inp(3, r, 'calc.perModuleCount', numOrBlank(getByPath(est, 'calc.perModuleCount')), 'num', 1));
     place(r, 4, lab(4, r, '模数(手工)', 'lab', 1));
     place(r, 5, inp(5, r, 'calc.moldManual', numOrBlank(getByPath(est, 'calc.moldManual')), 'num', 1));
-    place(r, 6, lab(6, r, '每平方重量(kg)', 'lab', 1));
-    place(r, 7, fx(7, r, '=IF(B' + R1 + '*H' + brickRow + '=0,"",B' + R1 + '/H' + brickRow + ')', 1, false, 'calc.perSqmWeight'));
-    place(r, 8, lab(8, r, '每立方重量(kg)', 'lab', 1));
-    place(r, 9, fx(9, r, '=IF(B' + R1 + '*J' + brickRow + '=0,"",B' + R1 + '/J' + brickRow + ')', 1, false, 'calc.perCubicWeight'));
-    place(r, 10, lab(10, r, '每托块数', 'lab', 1));
+    place(r, 6, lab(6, r, '每平方重量(公斤)', 'lab', 1));
+    // 每平方重量 = (1 / 每块砖面积) × 每块重量
+    place(r, 7, fx(7, r, '=IF(H' + brickRow + '=0,"",(1/H' + brickRow + ')*B' + R1 + ')', 1, false, 'calc.perSqmWeight'));
+    place(r, 8, lab(8, r, '每立方重量(公斤)', 'lab', 1));
+    // 每立方重量 = (1 / 每块砖体积) × 每块重量(注:体积,非面积)
+    place(r, 9, fx(9, r, '=IF(J' + brickRow + '=0,"",(1/J' + brickRow + ')*B' + R1 + ')', 1, false, 'calc.perCubicWeight'));
+    place(r, 10, lab(10, r, '每托块数(块)', 'lab', 1));
     place(r, 11, inp(11, r, 'calc.perPalletCount', numOrBlank(getByPath(est, 'calc.perPalletCount')), 'num', 1));
 
     var R2 = r + 1;
     r = addRow();
-    place(r, 0, lab(0, r, '每托平方', 'lab', 1));
+    place(r, 0, lab(0, r, '每托平方(m²)', 'lab', 1));
     place(r, 1, inp(1, r, 'calc.perPalletSqm', numOrBlank(getByPath(est, 'calc.perPalletSqm')), 'num', 1));
-    place(r, 2, lab(2, r, '每托重量(kg)', 'lab', 1));
+    place(r, 2, lab(2, r, '每托重量(公斤)', 'lab', 1));
     place(r, 3, fx(3, r, '=IF(B' + R2 + '*H' + R1 + '=0,"",B' + R2 + '*H' + R1 + ')', 1, false, 'calc.perPalletWeight'));
-    place(r, 4, lab(4, r, '计划数', 'lab', 1));
+    place(r, 4, lab(4, r, '计划数(m²)', 'lab', 1));
     place(r, 5, fx(5, r, '=IF(F' + R1 + '*D' + R1 + '*H' + brickRow + '=0,"",F' + R1 + '*D' + R1 + '*H' + brickRow + ')', 1, false, 'calc.planCount'));
-    place(r, 6, lab(6, r, '实际数', 'lab', 1));
+    place(r, 6, lab(6, r, '实际数(m²)', 'lab', 1));
     place(r, 7, inp(7, r, 'calc.actualCount', numOrBlank(getByPath(est, 'calc.actualCount')), 'num', 1));
     place(r, 8, lab(8, r, '成品率', 'lab', 1));
     place(r, 9, fx(9, r, '=IF(F' + R2 + '=0,"",IF(H' + R2 + '="","",H' + R2 + '/F' + R2 + '))', 1, true, 'calc.yieldRate'));
@@ -292,7 +294,7 @@
     var R3 = r + 1;
     r = addRow();
     // 每平方价 = 本期用料金额合计 ÷ 实际数(实际数为空则用计划数)(自动)
-    place(r, 0, lab(0, r, '每平方价', 'lab', 1));
+    place(r, 0, lab(0, r, '每平方价(元/m²)', 'lab', 1));
     place(r, 1, fx(1, r, '=IF(H' + R2 + '="",IF(F' + R2 + '=0,"",I' + (listSumRow || listStart) + '/F' + R2 + '),I' + (listSumRow || listStart) + '/H' + R2 + ')', 1, false, 'calc.perSqmPrice'));
     place(r, 2, lab(2, r, '始模', 'lab', 1));
     place(r, 3, inp(3, r, 'calc.startMold', numOrBlank(getByPath(est, 'calc.startMold')), 'num', 1));
