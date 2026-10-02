@@ -62,8 +62,9 @@
     const detail = [];
     const meta = { estCount: 0, rowCount: 0, totalKg: 0, totalAmount: 0, unmatched: 0 };
     const stockMap = new Map();   // name -> 累计
-    const lastMap = new Map();    // name -> [{ date, closing }] 按批次
 
+    // 先按时间段 + 产品筛选批次(材料筛选不参与批次筛选)
+    const screened = [];
     estimates.forEach(function (est) {
       const date = est.startDate || '';
       // 时间段:无日期的批次不纳入时间段筛选(避免误纳入)
@@ -71,15 +72,31 @@
       if (to && (!date || date > to)) return;
       const mp = matchProduct(est, products);
       if (types.length && types.indexOf(mp.name) < 0) return;
+      screened.push({ est: est, date: date, mp: mp });
+    });
 
+    // 全局最新命中批次(日期最大;空日期视为最早)→ 用于「最新批次结存」列
+    let latest = null;
+    screened.forEach(function (s) {
+      if (!latest) { latest = s; return; }
+      if ((s.date || '') > (latest.date || '')) latest = s;
+    });
+    const latestMap = new Map();  // name -> 该批次内该材料结存合计
+    if (latest) {
+      const lc = CostCalc.compute(latest.est);
+      (lc.rows || []).forEach(function (r) {
+        const nm = r.name || '';
+        latestMap.set(nm, (latestMap.get(nm) || 0) + num(r.stock));
+      });
+    }
+
+    screened.forEach(function (s) {
+      const est = s.est, date = s.date, mp = s.mp;
       const c = CostCalc.compute(est);
       const potB = num(est.potBottom);
       const potT = num(est.potTop);
       meta.estCount++;
       if (!mp.matched) meta.unmatched++;
-
-      // 本批次内按材料合计(同材料跨区时用于最新批次结存)
-      const perBatch = new Map();
 
       (c.rows || []).forEach(function (r) {
         const zone = r.zone === '面料' ? '面料' : '底料';
@@ -89,26 +106,21 @@
         const closing = num(r.stock);
         const name = r.name || '';
 
-        // 小计:始终按全部材料统计(材料筛选不缩小合计)
-        meta.totalKg += usageKg;
-        meta.totalAmount += amount;
-
         // 剩余材料累计(全部材料;输出时再按材料筛选过滤)
         if (!stockMap.has(name)) {
-          stockMap.set(name, { name: name, zone: zone, stockOnHand: 0, stockIn: 0, usageKg: 0, ids: {} });
+          stockMap.set(name, { name: name, zone: zone, stockOnHand: 0, stockIn: 0, usageKg: 0, zones: {}, ids: {} });
         }
         const acc = stockMap.get(name);
         acc.stockOnHand += num(r.stockOnHand);
         acc.stockIn += num(r.stockIn);
         acc.usageKg += usageKg;
-        acc.zone = acc.zone || zone;
+        acc.zones[zone] = 1;
         acc.ids[est.id || est.code || ''] = 1;
 
-        if (!perBatch.has(name)) perBatch.set(name, 0);
-        perBatch.set(name, perBatch.get(name) + closing);
-
-        // 明细:材料筛选只影响展示行
+        // 明细:材料筛选只影响展示行(小计随展示行,保证界面数字与屏幕行一致)
         if (mats.length && mats.indexOf(name) < 0) return;
+        meta.totalKg += usageKg;
+        meta.totalAmount += amount;
         detail.push({
           code: est.code || '',
           date: date,
@@ -127,11 +139,6 @@
           stockIn: num(r.stockIn)
         });
       });
-
-      perBatch.forEach(function (closing, name) {
-        if (!lastMap.has(name)) lastMap.set(name, []);
-        lastMap.get(name).push({ date: date, closing: closing });
-      });
     });
 
     // 明细排序:日期降序(空日期视为最早)→ 产品编号升序 → 用料降序
@@ -142,24 +149,19 @@
       return b.usageKg - a.usageKg;
     });
 
-    // 剩余材料:累计剩余升序(最缺在前)
+    // 剩余材料:累计剩余升序(最缺在前);最新批次结存取全局最新命中批次(该批次不含此材料则为 null)
     const stock = Array.from(stockMap.values())
       .filter(function (s) { return !mats.length || mats.indexOf(s.name) >= 0; })
       .map(function (s) {
-        const seq = (lastMap.get(s.name) || []).slice().sort(function (x, y) {
-          const dx = x.date || '', dy = y.date || '';
-          if (dx === dy) return 0;
-          return dx < dy ? -1 : 1;
-        });
-        const last = seq.length ? seq[seq.length - 1].closing : null;
+        const zones = Object.keys(s.zones).sort().join('/');
         return {
           name: s.name,
-          zone: s.zone,
+          zone: zones,
           stockOnHand: s.stockOnHand,
           stockIn: s.stockIn,
           usageKg: s.usageKg,
           closingTotal: s.stockOnHand + s.stockIn - s.usageKg,
-          latestClosing: last,
+          latestClosing: latestMap.has(s.name) ? latestMap.get(s.name) : null,
           estCount: Object.keys(s.ids).length
         };
       })

@@ -19,6 +19,12 @@ const APP = 'http://127.0.0.1:8237/';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
+  const login = await (await fetch(APP + 'api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  })).json();
+  const TOKEN = login.token;
+
   const child = spawn(EDGE, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-extensions', '--no-first-run',
     '--window-size=1600,900',
@@ -176,9 +182,73 @@ async function main() {
   await sleep(300);
   console.log('✓ 材料单选(只含黑水泥 / 剩余表 1 行 / 累计用料自洽)与导出按钮');
 
+  // ---------- 修复轮 F1:「全部」按钮应恢复不限 ----------
+  await clearUsage();
+  await evalJS(`(() => {
+    const inp = Array.from(document.querySelectorAll('#usage-filter input[name="usage-mat"]')).filter(function (i) { return i.value === '黑水泥'; })[0];
+    if (inp) inp.click();
+  })()`);
+  await sleep(400);
+  let f1 = await detailCount();
+  assert(f1 < 22, '前置:材料单选后行数应少于全量,实得 ' + f1);
+  await evalJS(`(() => {
+    const all = document.querySelector('#usage-filter input.ovl-all[data-group="usage-mat"]');
+    if (all) { all.checked = true; all.dispatchEvent(new Event('change', { bubbles: true })); }
+  })()`);
+  await sleep(450);
+  f1 = await detailCount();
+  const checkedMats = await evalJS(`document.querySelectorAll('#usage-filter input[name="usage-mat"]:checked').length`);
+  assert(f1 === 22, '点「全部」后明细应恢复 22 行,实得 ' + f1);
+  assert(checkedMats === 0, '点「全部」后子项应全部取消勾选,实得 ' + checkedMats);
+  console.log('✓ F1:「全部」按钮恢复不限并同步勾选状态');
+
+  // ---------- 修复轮 F2:导出文件名应带 .xls ----------
+  await evalJS(`(() => {
+    window.__expName = null;
+    if (window.Exporter) {
+      const orig = window.Exporter.exportXLS;
+      window.Exporter.exportXLS = function (name) { window.__expName = name; return Promise.resolve(true); };
+      window.__restoreExport = function () { window.Exporter.exportXLS = orig; };
+    }
+  })()`);
+  await evalJS(`document.querySelector('[data-action="usage-export-detail"]').click()`);
+  await sleep(350);
+  const expName = await evalJS(`window.__expName`);
+  assert(typeof expName === 'string' && /\.xls$/.test(expName),
+    '导出文件名应以 .xls 结尾,实得 ' + JSON.stringify(expName));
+  await evalJS(`(() => { if (window.__restoreExport) window.__restoreExport(); })()`);
+  console.log('✓ F2:导出文件名带 .xls 扩展名(' + expName + ')');
+
+  // ---------- 修复轮 F4:未匹配产品提示 ----------
+  const dd = await (await fetch(APP + 'api/data', { headers: { Authorization: 'Bearer ' + TOKEN } })).json();
+  const target = dd.estimates[0];
+  const backup = { productId: target.productId, name: target.name, code: target.code };
+  target.productId = 'no-such-product';
+  target.name = 'ZZ-未匹配测试';
+  target.code = 'ZZ-999';
+  await fetch(APP + 'api/data', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify(dd)
+  });
+  await evalJS(`location.reload()`);
+  assert(await waitFor(`!document.getElementById('view-usage').hidden && !!document.getElementById('usage-filter')`, 80),
+    '重载后用料明细页未就绪');
+  await sleep(400);
+  const unmatchText = await evalJS(`document.getElementById('usage-filter').textContent`);
+  assert(unmatchText.indexOf('未匹配') >= 0, '存在未匹配批次时应给出提示,实得 ' + unmatchText.slice(0, 140));
+  // 复原数据
+  const dd2 = await (await fetch(APP + 'api/data', { headers: { Authorization: 'Bearer ' + TOKEN } })).json();
+  const t2 = dd2.estimates.filter(function (e) { return e.code === 'ZZ-999'; })[0];
+  if (t2) { t2.productId = backup.productId; t2.name = backup.name; t2.code = backup.code; }
+  await fetch(APP + 'api/data', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify(dd2)
+  });
+  console.log('✓ F4:未匹配产品提示已显示(数据已复原)');
+
   assert(errs.length === 0, '存在 console 错误: ' + errs.join(' | '));
   console.log('✓ 无 console 错误');
-  console.log('\n✅ 用料明细页测试通过(任务2-5)');
+  console.log('\n✅ 用料明细页测试通过(任务2-5 + 修复轮)');
   ws.close(); child.kill();
   setTimeout(() => process.exit(0), 100);
 }

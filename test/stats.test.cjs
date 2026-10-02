@@ -86,8 +86,8 @@ ok(Stats.buildUsage(data, { from: '2026-10-01' }).meta.estCount === 2,
   '13 时间段筛选(≥2026-10-01 → 2 批)');
 ok(Stats.buildUsage(data, { types: ['标砖 A'] }).detail.length === 3, '14 产品筛选(标砖 A → 3 行)');
 const r15 = Stats.buildUsage(data, { mats: ['黑水泥'] });
-ok(r15.detail.length === 3 && near(r15.meta.totalKg, 1085),
-  '15 材料筛选只过滤明细行(3 行),合计仍为该批次全材料合计 1085');
+ok(r15.detail.length === 3 && near(r15.meta.totalKg, 460) && near(r15.meta.totalAmount, 119.6),
+  '15 材料筛选后:明细 3 行,小计按筛选后行合计(黑水泥 460 公斤 / 119.6 元),不再显示全材料合计');
 
 // ---------- 16 空值不产生 NaN ----------
 const blankEst = est('e9', 'p1', '标砖 A', 'A-100', '2026-09-02', 10, 5,
@@ -96,7 +96,14 @@ const r16 = Stats.buildUsage({ products: products, materials: materials, estimat
 const b16 = r16.detail[0];
 ok(b16 && near(b16.usageKg, 0) && near(b16.amount, 0) && near(b16.closing, 0),
   '16a 空值行按 0 计算(用量/金额/结存 = 0)');
-ok(JSON.stringify(r16).indexOf('NaN') < 0, '16b 结果中不含 NaN');
+const flatNums = []
+  .concat(r16.detail, r16.stock, [r16.meta])
+  .reduce(function (acc, o) {
+    Object.keys(o).forEach(function (k) { acc.push(o[k]); });
+    return acc;
+  }, []);
+ok(flatNums.every(function (v) { return typeof v !== 'number' || isFinite(v); }),
+  '16b 结果中所有数值字段均为有限数(无 NaN/Infinity)');
 
 // ---------- 17 同材料跨区 ----------
 const crossEst = est('e8', 'p1', '标砖 A', 'A-100', '2026-09-03', 10, 5,
@@ -116,5 +123,23 @@ ok(Array.isArray(r18.detail) && r18.detail.length === 0 &&
   r18.meta.estCount === 0 && r18.meta.rowCount === 0 &&
   r18.meta.totalKg === 0 && r18.meta.totalAmount === 0 && r18.meta.unmatched === 0,
   '18 空数据返回空表与零小计');
+
+// ---------- 19 最新批次结存:取全局最新命中批次(该批次不含此材料则为 null) ----------
+const d19 = {
+  products: products, materials: materials,
+  estimates: [
+    est('a1', 'p1', '标砖 A', 'A-100', '2026-09-01', 10, 0,
+      [['黑水泥', '底料', 10, 0.26, 0, 0], ['机制砂', '底料', 10, 0.06, 0, 0]]),
+    est('a2', 'p1', '标砖 A', 'A-100', '2026-10-01', 10, 0,
+      [['机制砂', '底料', 10, 0.06, 0, 0]])
+  ]
+};
+const r19 = Stats.buildUsage(d19, {});
+const s19b = r19.stock.filter(function (s) { return s.name === '黑水泥'; })[0];
+const s19s = r19.stock.filter(function (s) { return s.name === '机制砂'; })[0];
+ok(s19b && s19b.latestClosing === null,
+  '19a 最新批次(2026-10-01)不含该材料 → 最新批次结存为 null(界面显示「—」)');
+ok(s19s && near(s19s.latestClosing, -100),
+  '19b 最新批次含该材料 → 取该批次结存(机制砂 0+0−100 = -100)');
 
 console.log('\n✅ stats.js 全部单元测试通过');

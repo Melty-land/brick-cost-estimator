@@ -1348,6 +1348,9 @@
         (hasFilter ? '<button class="small" data-action="usage-clear">清除</button>' : '') +
         '<span class="ovl-count">共 ' + res.meta.estCount + ' 张预算表 / ' + res.meta.rowCount + ' 行明细' +
           ' / 合计用料 ' + fmt(res.meta.totalKg, 0) + ' 公斤 / 合计金额 ¥' + fmt(res.meta.totalAmount) + '</span>' +
+        (res.meta.unmatched > 0
+          ? '<span style="color:#a06700">⚠ 有 ' + res.meta.unmatched + ' 张估算单未匹配到产品(按预算表编号显示),请检查名称规格或产品编号</span>'
+          : '') +
         '<button class="small" data-action="usage-export-detail">' + btnIcon('download', '导出明细') + '</button>' +
         '<button class="small" data-action="usage-export-stock">' + btnIcon('download', '导出剩余材料') + '</button>' +
       '</div>' +
@@ -1377,7 +1380,7 @@
     const d = new Date();
     const stamp = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
     const title = which === 'detail' ? '用料明细' : '剩余材料';
-    Promise.resolve(Exporter.exportXLS(title + '-' + stamp, tableEl, title))
+    Promise.resolve(Exporter.exportXLS(title + '-' + stamp + '.xls', tableEl, title))
       .then(function (ok) { if (ok !== false) toast('已导出:' + title + '-' + stamp + '.xls'); })
       .catch(function () { toast('导出失败'); });
   }
@@ -1776,6 +1779,13 @@
     }
     if (el.matches('input.ovl-all[data-group]')) {
       const g = el.dataset.group;
+      // 用料明细页的「全部」(usage-type / usage-mat)走独立分支,避免与总览/图表混淆
+      if (g === 'usage-type' || g === 'usage-mat') {
+        if (g === 'usage-type') usageTypes = el.checked ? [] : usageAllTypes();
+        else usageMats = el.checked ? [] : usageAllMats();
+        withScrollKept(renderUsage);
+        return;
+      }
       if (g === 'ovl-type') ovlTypes = el.checked ? [] : allTypes();
       if (g === 'ovl-mat') ovlMats = el.checked ? [] : allMatNames();
       syncOvlCheckboxes();
@@ -1808,16 +1818,6 @@
         return;
       }
       usageFrom = fv; usageTo = tv;
-      withScrollKept(renderUsage);
-      return;
-    }
-    if (el.matches('input.ovl-all[data-group="usage-type"]')) {
-      usageTypes = el.checked ? [] : usageAllTypes();
-      withScrollKept(renderUsage);
-      return;
-    }
-    if (el.matches('input.ovl-all[data-group="usage-mat"]')) {
-      usageMats = el.checked ? [] : usageAllMats();
       withScrollKept(renderUsage);
       return;
     }

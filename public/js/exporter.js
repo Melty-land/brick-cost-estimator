@@ -23,8 +23,12 @@
   }
   function isNum(s) {
     if (typeof s === 'number') return true;
-    const t = String(s).trim().replace(/,/g, '');
+    const t = String(s).trim().replace(/^[¥￥]/, '').replace(/,/g, '');
     return t !== '' && /^-?\d*\.?\d+$/.test(t);
+  }
+  /** 数值单元格文本 → 纯数字字符串(剥离货币符号与千分位) */
+  function numText(s) {
+    return String(s).trim().replace(/^[¥￥]/, '').replace(/,/g, '');
   }
   function isPct(s) {
     return typeof s === 'string' && /^-?\d+(\.\d+)?%$/.test(s.trim());
@@ -67,7 +71,7 @@
         if (isPct(v)) {
           ws += '<ss:Cell ss:StyleID="pct"><ss:Data ss:Type="Number">' + escXml(parseFloat(v) / 100) + '</ss:Data></ss:Cell>\n';
         } else if (isNum(v)) {
-          ws += '<ss:Cell ss:StyleID="num"><ss:Data ss:Type="Number">' + escXml(parseFloat(v.replace(/,/g, ''))) + '</ss:Data></ss:Cell>\n';
+          ws += '<ss:Cell ss:StyleID="num"><ss:Data ss:Type="Number">' + escXml(parseFloat(numText(v))) + '</ss:Data></ss:Cell>\n';
         } else {
           ws += '<ss:Cell ss:StyleID="txt"><ss:Data ss:Type="String">' + escXml(v) + '</ss:Data></ss:Cell>\n';
         }

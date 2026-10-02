@@ -41,4 +41,12 @@ assert.strictEqual(Ex.isPct('x%'), false);
 assert.strictEqual(Ex.isNum(-3.5), true);
 console.log('✓ 数值/百分比推断边界正确');
 
+// 带货币符号的金额应识别为数值(便于在 Excel 中求和)
+const moneyXml = Ex.buildSpreadsheetML('金额', [['金额'], ['¥52.00'], ['￥1,234.50']]);
+assert.ok(moneyXml.includes('<ss:Data ss:Type="Number">52</ss:Data>'), '¥ 金额应转 Number 并剥离货币符号');
+assert.ok(moneyXml.includes('<ss:Data ss:Type="Number">1234.5</ss:Data>'), '￥ 带千分位金额应转 Number');
+assert.strictEqual(Ex.isNum('¥52.00'), true);
+assert.strictEqual(Ex.isNum('￥1,234.50'), true);
+console.log('✓ 带 ¥/￥ 的金额导出为数值类型(Excel 可直接求和)');
+
 console.log('✅ exporter 单元测试通过');

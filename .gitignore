@@ -27,3 +27,6 @@ data/.*-regress-*
 登录注册方案.md
 界面优化方案.md
 P0演示-iOS风格/
+
+# 计划执行的临时工作区(ledger/brief/review 包,不进仓库)
+.superpowers/
